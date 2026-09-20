@@ -1,0 +1,78 @@
+{
+  "title": "Message helpers PR",
+  "description": "A synthetic PR change review demonstrating source-grounded pseudocode markers.",
+  "baseRef": "before",
+  "headRef": "after",
+  "sources": { "base": "base", "head": "head" },
+  "files": [
+    {
+      "path": "message.ts",
+      "note": "Includes a structural version edit, an adjacent copied helper, and changed functions without pseudocode cards."
+    }
+  ],
+  "cards": [
+    {
+      "id": "normalize-message",
+      "file": "message.ts",
+      "symbol": "normalizeMessage",
+      "summary": "The normalized result is now lowercase.",
+      "before": "normalizeMessage(message: string) → string\n  trimmed = message.trim()\n  return trimmed",
+      "after": "normalizeMessage(message: string) → string\n  trimmed = message.trim()\n  return trimmed.toLowerCase()",
+      "mappingsBefore": [
+        { "pseudo": [1, 1], "source": [1, 1] },
+        { "pseudo": [2, 2], "source": [2, 2] },
+        { "pseudo": [3, 3], "source": [3, 3] }
+      ],
+      "mappingsAfter": [
+        { "pseudo": [1, 1], "source": [1, 1] },
+        { "pseudo": [2, 2], "source": [2, 2] },
+        { "pseudo": [3, 3], "source": [3, 3] }
+      ]
+    },
+    {
+      "id": "legacy-slug",
+      "file": "message.ts",
+      "symbol": "legacySlug",
+      "summary": "The legacy slug helper is removed.",
+      "before": "legacySlug(message: string) → string\n  return message.trim().replaceAll(\" \", \"-\")",
+      "after": null,
+      "mappingsBefore": [
+        { "pseudo": [1, 1], "source": [1, 1] },
+        { "pseudo": [2, 2], "source": [2, 2] }
+      ],
+      "mappingsAfter": []
+    },
+    {
+      "id": "format-label",
+      "file": "message.ts",
+      "symbol": "formatLabel",
+      "summary": "The implementation now names its normalized intermediate value; the pseudocode meaning is unchanged.",
+      "before": "formatLabel(label: string) → string\n  return \"[\" + label.trim() + \"]\"",
+      "after": "formatLabel(label: string) → string\n  return \"[\" + label.trim() + \"]\"",
+      "mappingsBefore": [
+        { "pseudo": [1, 1], "source": [1, 1] },
+        { "pseudo": [2, 2], "source": [2, 2] }
+      ],
+      "mappingsAfter": [
+        { "pseudo": [1, 1], "source": [1, 1] },
+        { "pseudo": [2, 2], "source": [2, 3] }
+      ]
+    },
+    {
+      "id": "stable-greeting-grounding-guard",
+      "file": "message.ts",
+      "symbol": "stableGreeting",
+      "summary": "This deliberate wording-only edit stays neutral because its source did not change.",
+      "before": "stableGreeting(name: string) → string\n  return \"Hello \" + name",
+      "after": "stableGreeting(name: string) → string\n  greeting = \"Hello \" + name\n  return greeting",
+      "mappingsBefore": [
+        { "pseudo": [1, 1], "source": [1, 1] },
+        { "pseudo": [2, 2], "source": [2, 2] }
+      ],
+      "mappingsAfter": [
+        { "pseudo": [1, 1], "source": [1, 1] },
+        { "pseudo": [2, 3], "source": [2, 2] }
+      ]
+    }
+  ]
+}

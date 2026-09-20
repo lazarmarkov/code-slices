@@ -4,7 +4,16 @@ This is a vocabulary for an LLM translating source into pseudocode, not an execu
 
 ## Notation
 
-- Calls retain real function names. Arguments show relevant data; assignments name returned values.
+- Spell the boolean type `bool` in signatures and results.
+- `-> status(resolved | dismissed | escalated)` lists the enum variants a function may return. It does not test membership.
+- `status.in?(resolved, dismissed, escalated)` tests whether `status` equals any listed value. Prefix the predicate with `!` to negate it. A collection may replace the explicit values when the source uses a named collection.
+- Predicates end in `?`. A source name such as `isTerminalInvestigationStatus` may appear as the documented pseudocode alias `terminalInvestigationStatus?`. Common source-derived predicates include `empty?`, `blank?`, `finite?`, `array?`, and `record?`.
+- `record?(value)` means value is a non-null object and is not an array. `array?(value)` means value is an array. These are notation aliases for the corresponding source guards, not claims that those methods exist at runtime.
+- Guard clauses may put the condition after the explicit action: `return [] if hosts.empty?`, `return if !workflow`, and `next if !workflow`. Express negated guards with `if !condition`. A bare value in an `if` guard means present or absent only when the mapped source performs that existence check; it does not import Ruby or JavaScript truthiness.
+- `items.map(id)` is field projection: take the `id` field from every item. The field name is not a callback or a runtime method reference.
+- `0..1` is an inclusive range. Use a range only when both endpoints are included by the source.
+- Keep explicit `return`, explicit call parentheses, and explicit assignment. Do not introduce Ruby implicit returns or implicit calls.
+- Calls retain real function names except for documented predicate aliases. Arguments show relevant data; assignments name returned values.
 - An arrow after a call denotes its result or result type.
 - Indentation in a call tree denotes a caller invoking a child. Nested calls may expand another function's body; mappings identify their actual source location.
 - Object previews may show selected fields with an ellipsis for omitted fields.
