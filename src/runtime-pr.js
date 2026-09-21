@@ -128,7 +128,8 @@ function renderCards() {
       ? '<div class="pane-label source-side-labels"><span>Source before</span><span>Source after</span></div>'
       : '<div class="pane-label">Source change</div>';
     const sourcePane = state.diffStyle === 'hidden' ? '' : `<div class="source-pane">${sourceLabel}<div class="source-diff"></div></div>`;
-    article.innerHTML = `<div class="fn-header"><span class="card-number">${String(index + 1).padStart(2, '0')}</span><h2>${escapeHtml(name)}</h2><span class="tag status-${card.status.toLowerCase()}">${escapeHtml(card.status)}</span></div><div class="change-panes"><div class="pseudo-pane"><div class="pane-label source-breadcrumb"><code>${escapeHtml(card.file)}</code></div><div class="pseudo-diff" role="table" aria-label="Full-function pseudocode change">${card.pseudoRows.map(pseudoLine).join('')}</div></div>${sourcePane}</div>`;
+    const pseudoLabel = state.diffStyle === 'hidden' ? '' : '<div class="pane-label">Pseudocode</div>';
+    article.innerHTML = `<div class="fn-header"><span class="card-number">${String(index + 1).padStart(2, '0')}</span><h2>${escapeHtml(name)}</h2><span class="tag status-${card.status.toLowerCase()}">${escapeHtml(card.status)}</span><code class="card-file">${escapeHtml(card.file)}</code></div><div class="change-panes"><div class="pseudo-pane">${pseudoLabel}<div class="pseudo-diff" role="table" aria-label="Full-function pseudocode change">${card.pseudoRows.map(pseudoLine).join('')}</div></div>${sourcePane}</div>`;
     container.append(article);
     if (state.diffStyle === 'hidden') continue;
     renderDiff(article.querySelector('.source-diff'), card.sourceBefore?.code, card.sourceAfter?.code);
