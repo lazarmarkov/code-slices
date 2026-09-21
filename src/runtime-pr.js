@@ -118,8 +118,8 @@ function decorateEvidence(card) {
 }
 
 const PEEK_STYLE = '[data-pr-evidence]{background:#fef3c7!important;box-shadow:inset 3px 0 #d97706}';
-// Three pseudocode lines (25px each) stay visible between the hovered line and the peek.
-const PEEK_GAP = 3 * 25 + 8;
+// One and a half pseudocode lines (25px each) stay visible between the hovered line and the peek.
+const PEEK_GAP = 1.5 * 25 + 8;
 const peek = { element: null, diff: null, title: null, cardId: null, hovered: null, pointerInside: false };
 
 function ensurePeek() {
