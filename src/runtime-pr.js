@@ -22,7 +22,9 @@ const theme = { light: sourceThemeName, dark: sourceThemeName };
 const state = {
   diffStyle: localStorage.getItem('code-slices-pr-diff-style') || 'unified',
 };
-if (!['unified', 'split'].includes(state.diffStyle)) state.diffStyle = 'unified';
+const DIFF_STYLES = ['unified', 'split', 'hidden'];
+if (!DIFF_STYLES.includes(state.diffStyle)) state.diffStyle = 'unified';
+const sourceDiffStyle = () => (state.diffStyle === 'hidden' ? 'unified' : state.diffStyle);
 
 const escapeHtml = (value) =>
   String(value ?? '').replace(
@@ -37,7 +39,7 @@ function renderDiff(container, before, after) {
     themeType: 'light',
     overflow: 'wrap',
     disableFileHeader: true,
-    diffStyle: state.diffStyle,
+    diffStyle: sourceDiffStyle(),
   }).render({
     containerWrapper: container,
     oldFile: { name: 'before.ts', contents: withFinalNewline(before) },
@@ -114,6 +116,7 @@ function decorateEvidence(card) {
 
 function renderCards() {
   document.body.classList.toggle('source-split', state.diffStyle === 'split');
+  document.body.classList.toggle('source-hidden', state.diffStyle === 'hidden');
   const container = document.getElementById('cards');
   container.replaceChildren();
   for (const [index, card] of data.cards.entries()) {
@@ -124,8 +127,10 @@ function renderCards() {
     const sourceLabel = state.diffStyle === 'split'
       ? '<div class="pane-label source-side-labels"><span>Source before</span><span>Source after</span></div>'
       : '<div class="pane-label">Source change</div>';
-    article.innerHTML = `<div class="fn-header"><span class="card-number">${String(index + 1).padStart(2, '0')}</span><h2>${escapeHtml(name)}</h2><span class="tag status-${card.status.toLowerCase()}">${escapeHtml(card.status)}</span></div><div class="change-panes"><div class="pseudo-pane"><div class="pane-label source-breadcrumb"><code>${escapeHtml(card.file)}</code></div><div class="pseudo-diff" role="table" aria-label="Full-function pseudocode change">${card.pseudoRows.map(pseudoLine).join('')}</div></div><div class="source-pane">${sourceLabel}<div class="source-diff"></div></div></div>`;
+    const sourcePane = state.diffStyle === 'hidden' ? '' : `<div class="source-pane">${sourceLabel}<div class="source-diff"></div></div>`;
+    article.innerHTML = `<div class="fn-header"><span class="card-number">${String(index + 1).padStart(2, '0')}</span><h2>${escapeHtml(name)}</h2><span class="tag status-${card.status.toLowerCase()}">${escapeHtml(card.status)}</span></div><div class="change-panes"><div class="pseudo-pane"><div class="pane-label source-breadcrumb"><code>${escapeHtml(card.file)}</code></div><div class="pseudo-diff" role="table" aria-label="Full-function pseudocode change">${card.pseudoRows.map(pseudoLine).join('')}</div></div>${sourcePane}</div>`;
     container.append(article);
+    if (state.diffStyle === 'hidden') continue;
     renderDiff(article.querySelector('.source-diff'), card.sourceBefore?.code, card.sourceAfter?.code);
     requestAnimationFrame(() => decorateEvidence(article));
   }
