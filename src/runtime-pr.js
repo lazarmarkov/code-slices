@@ -118,6 +118,8 @@ function decorateEvidence(card) {
 }
 
 const PEEK_STYLE = '[data-pr-evidence]{background:#fef3c7!important;box-shadow:inset 3px 0 #d97706}';
+// Three pseudocode lines (25px each) stay visible between the hovered line and the peek.
+const PEEK_GAP = 3 * 25 + 8;
 const peek = { element: null, diff: null, title: null, cardId: null, hovered: null, pointerInside: false };
 
 function ensurePeek() {
@@ -169,8 +171,8 @@ function positionPeek(line) {
   const rect = line.getBoundingClientRect();
   const element = peek.element;
   const height = element.offsetHeight;
-  const below = rect.bottom + 8 + height <= window.innerHeight;
-  element.style.top = `${below ? rect.bottom + 8 : Math.max(8, rect.top - 8 - height)}px`;
+  const below = rect.bottom + PEEK_GAP + height <= window.innerHeight;
+  element.style.top = `${below ? rect.bottom + PEEK_GAP : Math.max(8, rect.top - PEEK_GAP - height)}px`;
   const width = element.offsetWidth;
   element.style.left = `${Math.max(16, Math.min(rect.left + 60, window.innerWidth - width - 16))}px`;
 }
