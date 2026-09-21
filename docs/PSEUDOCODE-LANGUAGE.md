@@ -6,6 +6,7 @@ This is a vocabulary for an LLM translating source into pseudocode, not an execu
 
 - Spell the boolean type `bool` in signatures and results.
 - Omit a parameter or field annotation whose whole type is a primitive (`string`, `number`, `bool`): write `key` for `key: string` and `limit?` for `limit?: number`. Keep unions, arrays, generics, named types and every return type, since those carry information the name does not.
+- A parameter or field that may be `null` or `undefined` is written with `?` instead of the union: `warehouseRaw?` for `warehouseRaw?: string | null` and `warehouseRef?: WarehouseRef` for `warehouseRef: WarehouseRef | null`. Return types keep the explicit union, since returning `null` is an outcome the reader must see.
 - `-> status(delivered | returned | lost)` lists the enum variants a function may return. It does not test membership.
 - `status.in?(delivered, returned, lost)` tests whether `status` equals any listed value. Prefix the predicate with `!` to negate it. A collection may replace the explicit values when the source uses a named collection.
 - Predicates end in `?`. A source name such as `isTerminalShipmentStatus` may appear as the documented pseudocode alias `terminalShipmentStatus?`. Common source-derived predicates include `empty?`, `blank?`, `finite?`, `array?`, and `record?`.

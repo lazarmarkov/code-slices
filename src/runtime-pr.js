@@ -94,7 +94,7 @@ function decorateEvidence(card) {
   const root = sourceRoot(card.querySelector('.source-diff'));
   if (!root) return;
   const style = document.createElement('style');
-  style.textContent = '[data-pr-evidence]{background:#fef3c7!important;box-shadow:inset 3px 0 #d97706}';
+  style.textContent = PEEK_STYLE;
   root.append(style);
   const clear = () => root.querySelectorAll('[data-pr-evidence]').forEach((node) => node.removeAttribute('data-pr-evidence'));
   card.querySelector('.pseudo-diff').addEventListener('pointerover', (event) => {
@@ -116,6 +116,109 @@ function decorateEvidence(card) {
   });
   card.querySelector('.pseudo-diff').addEventListener('pointerleave', clear);
 }
+
+const PEEK_STYLE = '[data-pr-evidence]{background:#fef3c7!important;box-shadow:inset 3px 0 #d97706}';
+const peek = { element: null, diff: null, title: null, cardId: null, hovered: null, pointerInside: false };
+
+function ensurePeek() {
+  if (peek.element) return;
+  const element = document.createElement('div');
+  element.className = 'source-peek';
+  element.hidden = true;
+  element.innerHTML = '<div class="peek-header"><span class="peek-title"></span><button type="button" class="peek-close" aria-label="Close source peek">Esc</button></div><div class="peek-diff"></div>';
+  element.addEventListener('pointerenter', () => { peek.pointerInside = true; });
+  element.addEventListener('pointerleave', () => { peek.pointerInside = false; closePeek(); });
+  element.querySelector('.peek-close').addEventListener('click', closePeek);
+  document.body.append(element);
+  peek.element = element;
+  peek.diff = element.querySelector('.peek-diff');
+  peek.title = element.querySelector('.peek-title');
+}
+
+function closePeek() {
+  if (peek.element) peek.element.hidden = true;
+}
+
+function highlightPeekLines(line) {
+  const root = sourceRoot(peek.diff);
+  if (!root) return;
+  if (!root.querySelector('style[data-peek]')) {
+    const style = document.createElement('style');
+    style.dataset.peek = '';
+    style.textContent = PEEK_STYLE;
+    root.append(style);
+  }
+  root.querySelectorAll('[data-pr-evidence]').forEach((node) => node.removeAttribute('data-pr-evidence'));
+  const select = (numbers, types) => {
+    for (const number of new Set(numbers)) {
+      for (const type of types) {
+        root
+          .querySelectorAll(`[data-line="${number}"][data-line-type="${type}"],[data-column-number="${number}"][data-line-type="${type}"]`)
+          .forEach((node) => node.setAttribute('data-pr-evidence', ''));
+      }
+    }
+  };
+  select(line.dataset.beforeLines.split(',').filter(Boolean).map(Number), ['change-deletion']);
+  select(line.dataset.afterLines.split(',').filter(Boolean).map(Number), ['change-addition', 'context']);
+  const first = root.querySelector('[data-pr-evidence]');
+  if (first) first.scrollIntoView({ block: 'center' });
+  else peek.diff.scrollTop = 0;
+}
+
+function positionPeek(line) {
+  const rect = line.getBoundingClientRect();
+  const element = peek.element;
+  const height = element.offsetHeight;
+  const below = rect.bottom + 8 + height <= window.innerHeight;
+  element.style.top = `${below ? rect.bottom + 8 : Math.max(8, rect.top - 8 - height)}px`;
+  const width = element.offsetWidth;
+  element.style.left = `${Math.max(16, Math.min(rect.left + 60, window.innerWidth - width - 16))}px`;
+}
+
+function openPeek(line) {
+  const article = line.closest('.pr-card');
+  const card = data.cards.find((entry) => entry.id === article?.id);
+  if (!card) return;
+  ensurePeek();
+  const element = peek.element;
+  element.hidden = false;
+  const lines = [...line.dataset.beforeLines.split(',').filter(Boolean).map((n) => `before ${n}`), ...line.dataset.afterLines.split(',').filter(Boolean).map((n) => `after ${n}`)];
+  peek.title.textContent = `${card.file} · source ${compressedLines(line.dataset.afterLines.split(',').filter(Boolean).map(Number)) || compressedLines(line.dataset.beforeLines.split(',').filter(Boolean).map(Number)) || 'unmapped'}`;
+  const rerender = peek.cardId !== card.id;
+  if (rerender) {
+    peek.cardId = card.id;
+    peek.diff.replaceChildren();
+    renderDiff(peek.diff, card.sourceBefore?.code, card.sourceAfter?.code);
+  }
+  positionPeek(line);
+  if (rerender) requestAnimationFrame(() => highlightPeekLines(line));
+  else highlightPeekLines(line);
+}
+
+function peekActive() {
+  return state.diffStyle === 'hidden';
+}
+
+document.getElementById('cards').addEventListener('pointerover', (event) => {
+  if (!peekActive()) return;
+  const line = event.target.closest('.pseudo-line');
+  if (!line) return;
+  peek.hovered = line;
+  if (event.shiftKey) openPeek(line);
+});
+document.getElementById('cards').addEventListener('pointerleave', () => {
+  peek.hovered = null;
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closePeek();
+  if (event.key === 'Shift' && peekActive() && peek.hovered) openPeek(peek.hovered);
+});
+document.addEventListener('keyup', (event) => {
+  if (event.key === 'Shift' && !peek.pointerInside) closePeek();
+});
+document.addEventListener('pointerdown', (event) => {
+  if (peek.element && !peek.element.hidden && !peek.element.contains(event.target)) closePeek();
+});
 
 function renderCards() {
   document.body.classList.toggle('source-split', state.diffStyle === 'split');
@@ -178,6 +281,8 @@ document.querySelectorAll('[data-diff-style]').forEach((button) => {
   button.addEventListener('click', () => {
     state.diffStyle = button.dataset.diffStyle;
     localStorage.setItem('code-slices-pr-diff-style', state.diffStyle);
+    closePeek();
+    peek.cardId = null;
     renderCards();
     renderRemainder();
     updateButtons();
