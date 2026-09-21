@@ -80,7 +80,10 @@ function pseudoLine(row) {
     ? `<span class="evidence" title="${escapeHtml(evidenceTitle(row))}">${escapeHtml(row.evidenceKind)}</span>`
     : '';
   const title = row.evidenceKind ? `${row.evidenceKind}: ${evidenceTitle(row)}` : '';
-  return `<div class="${className}" data-before-lines="${row.beforeSourceLines.join(',')}" data-after-lines="${row.afterSourceLines.join(',')}"${title ? ` title="${escapeHtml(title)}"` : ''}><span class="marker">${row.marker || ' '}</span><span class="old-number">${row.oldLine || ''}</span><span class="new-number">${row.newLine || ''}</span><code>${row.highlighted || escapeHtml(row.text) || ' '}</code>${evidence}</div>`;
+  const indent = (row.text.match(/^ */) || [''])[0].length;
+  const body = (row.highlighted || escapeHtml(row.text)).replace(/^\s+/, '') || ' ';
+  const hanging = `padding-left:calc(5px + ${indent + 2}ch);text-indent:-2ch`;
+  return `<div class="${className}" data-before-lines="${row.beforeSourceLines.join(',')}" data-after-lines="${row.afterSourceLines.join(',')}"${title ? ` title="${escapeHtml(title)}"` : ''}><span class="marker">${row.marker || ' '}</span><span class="old-number">${row.oldLine || ''}</span><span class="new-number">${row.newLine || ''}</span><code style="${hanging}">${body}</code>${evidence}</div>`;
 }
 
 function sourceRoot(container) {
