@@ -60,6 +60,7 @@
 .pseudo-line.neutral-edit { color: #6b7280; }
 .evidence { align-self: center; margin: 2px 7px 2px 3px; padding: 1px 5px; border: 1px solid #d4d4d8; border-radius: 999px; background: #fff; color: #52525b; font: 600 9px/1.5 system-ui, sans-serif; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
 .source-diff, .raw-diff { min-width: 0; }
+.pr-card .source-pane .empty { margin: 12px; }
 .source-diff diffs-container, .raw-diff diffs-container { --diffs-font-size: 14px; --diffs-line-height: 21px; }
 .remainder { margin-top: 34px; }
 .remainder details { padding: 10px 0; border-top: 1px solid var(--line); }

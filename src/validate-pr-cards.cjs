@@ -1,31 +1,35 @@
 #!/usr/bin/env node
+// Checks authored cards against a prepared directory and optionally writes a repair packet.
+// Exits 1 on errors. Scope warnings alone still exit 0; a reviewer decides each one.
 const fs = require('node:fs');
 const path = require('node:path');
-const { findSymbol, sourceSymbols } = require('./source-model.cjs');
+const { findSymbol, isValidRange, sourceSymbols } = require('./source-model.cjs');
 const { AUTHORING_RULES, referencedContracts, scopeIdentifiers } = require('./pr-generation-contract.cjs');
 
-const arguments = process.argv.slice(2);
-const preparedInput = arguments.shift();
+const args = process.argv.slice(2);
+const preparedInput = args.shift();
 if (!preparedInput) {
   process.stderr.write(
     'Usage: node src/validate-pr-cards.cjs <prepared-directory> [cards.json] [--repair-output repair-packet.json]\n',
   );
   process.exit(1);
 }
-const cardsInput = arguments[0] && !arguments[0].startsWith('--') ? arguments.shift() : 'cards.json';
+const prepared = path.resolve(preparedInput);
+// Relative file arguments resolve against the prepared directory.
+const inPrepared = (file) => path.resolve(prepared, file);
+const cardsPath = inPrepared(args[0] && !args[0].startsWith('--') ? args.shift() : 'cards.json');
 let repairOutput = null;
-while (arguments.length) {
-  const name = arguments.shift();
-  const value = arguments.shift();
+while (args.length) {
+  const name = args.shift();
+  const value = args.shift();
   if (name !== '--repair-output' || !value) throw new Error(`Unknown or incomplete option: ${name}`);
-  repairOutput = path.resolve(value);
+  repairOutput = inPrepared(value);
 }
 
-const prepared = path.resolve(preparedInput);
-const manifest = JSON.parse(fs.readFileSync(path.join(prepared, 'manifest.json'), 'utf8'));
-const packet = JSON.parse(fs.readFileSync(path.join(prepared, 'packet.json'), 'utf8'));
-const cardsPath = path.isAbsolute(cardsInput) ? cardsInput : path.join(prepared, cardsInput);
-const authored = JSON.parse(fs.readFileSync(cardsPath, 'utf8')).cards;
+const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+const manifest = readJson(path.join(prepared, 'manifest.json'));
+const packet = readJson(path.join(prepared, 'packet.json'));
+const authored = readJson(cardsPath).cards;
 const expected = packet.files.flatMap((file) => file.functions.map((entry) => entry.card));
 const errors = [];
 const warnings = [];
@@ -80,14 +84,7 @@ function validateSide(card, revision, pseudocode, mappings, source) {
       ['pseudo', mapping?.pseudo, pseudoLines.length],
       ['source', mapping?.source, sourceLineCount],
     ]) {
-      const invalid =
-        !Array.isArray(range) ||
-        range.length !== 2 ||
-        !range.every(Number.isInteger) ||
-        range[0] < 1 ||
-        range[1] < range[0] ||
-        range[1] > maximum;
-      if (invalid) {
+      if (!isValidRange(range, maximum)) {
         addError(card.id, `${card.id} ${revision}: mapping ${index + 1} has invalid ${name} range`);
       } else if (name === 'pseudo') {
         validPseudoRange = true;
