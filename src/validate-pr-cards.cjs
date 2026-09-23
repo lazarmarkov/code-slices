@@ -6,14 +6,16 @@ const path = require('node:path');
 const { findSymbol, isValidRange, sourceSymbols } = require('./source-model.cjs');
 const { AUTHORING_RULES, referencedContracts, scopeIdentifiers } = require('./pr-generation-contract.cjs');
 
-const args = process.argv.slice(2);
-const preparedInput = args.shift();
-if (!preparedInput) {
-  process.stderr.write(
-    'Usage: node src/validate-pr-cards.cjs <prepared-directory> [cards.json] [--repair-output repair-packet.json]\n',
-  );
+const USAGE =
+  'Usage: node src/validate-pr-cards.cjs <prepared-directory> [cards.json] [--repair-output repair-packet.json]';
+function usageError(message) {
+  process.stderr.write(`${message ? `${message}\n` : ''}${USAGE}\n`);
   process.exit(1);
 }
+
+const args = process.argv.slice(2);
+const preparedInput = args.shift();
+if (!preparedInput) usageError();
 const prepared = path.resolve(preparedInput);
 // Relative file arguments resolve against the prepared directory.
 const inPrepared = (file) => path.resolve(prepared, file);
@@ -22,7 +24,7 @@ let repairOutput = null;
 while (args.length) {
   const name = args.shift();
   const value = args.shift();
-  if (name !== '--repair-output' || !value) throw new Error(`Unknown or incomplete option: ${name}`);
+  if (name !== '--repair-output' || !value) usageError(`Unknown or incomplete option: ${name}`);
   repairOutput = inPrepared(value);
 }
 

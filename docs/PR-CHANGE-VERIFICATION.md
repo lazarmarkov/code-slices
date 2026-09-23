@@ -28,12 +28,12 @@ Inspect the built report as well as the JSON:
 - A pseudocode addition or removal receives `+` or `-` only when its mapping intersects an actual added or deleted source line.
 - Identical pseudocode receives `~` when its mapped source changed.
 - A wording-only pseudocode change over unchanged source has no change marker or change color.
-- Signature-only evidence is labelled `signature`; mapped body evidence is labelled `implementation`.
+- On a modified function, a line whose mapped changes are all in the declaration shows a `signature` badge. A line with mapped body changes is called `implementation` in its tooltip.
 - Removed functions remain visible.
 
 ## Coverage and privacy
 
-- Changed symbols without cards are named in the collapsed remainder and their exact file diff can be opened.
-- Structural changes outside extracted functions also cause the file to appear in the remainder.
+- Changed functions without cards are named under Remaining source changes, and their exact file diff opens there.
+- A changed line outside every extracted function also lists its file there.
 - Test, eval, fixture and test-helper paths do not appear in cards, diffs, indexes or evidence.
 - The output remains at the requested private location when its source is private.

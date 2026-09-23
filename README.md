@@ -1,57 +1,80 @@
 # Code Slices
 
-Code Slices builds standalone HTML reports that explain changed TypeScript code. The active execution-slice mode follows selected paths. The experimental PR-change mode compares full-function pseudocode with exact TypeScript changes and marks only changes backed by mapped source lines.
+Code Slices builds standalone HTML reports that explain changed TypeScript code. A report shows authored pseudocode beside the exact source, and each pseudocode line maps to the source lines it describes.
+
+There are two modes:
+
+- **Execution slice** follows one selected execution path through the changed functions.
+- **PR change** (experimental) shows each changed function as a pseudocode diff beside its exact TypeScript diff. A pseudocode line is marked as changed only when the source lines it maps to changed.
+
+See [docs/MODES.md](docs/MODES.md) for how the modes differ.
 
 ## Quick start
 
-Install dependencies and build the synthetic example:
+You need Node.js 20 or later, pnpm and Git.
 
 ```sh
 pnpm install
-pnpm example
+pnpm example           # writes dist/example.html (execution slice)
+pnpm example:pr        # writes dist/pr-change.html (PR change)
+pnpm example:palettes  # writes dist/palettes.html (code palette comparison)
+pnpm test
 ```
 
-Open `dist/example.html` in a browser. The report is self-contained and does not need a server.
+Open a report file directly in a browser; it needs no server. It does need network access, because it loads its code renderer, [`@pierre/diffs`](https://www.npmjs.com/package/@pierre/diffs), from esm.sh.
 
-Build the synthetic PR-change example separately:
+## What the examples show
+
+Both examples are small synthetic changes to one file, `message.ts`.
+
+[`examples/execution-slice`](examples/execution-slice/manifest.json) has one flow, "Normalize one message", with a card for `normalizeMessage`. The changed-code index also lists `isEmptyMessage`, which no slice covers. Use the toolbar to switch between the After, Before and Changes revisions, and between the Pseudocode and Split views.
+
+[`examples/pr-change`](examples/pr-change/manifest.json) has four cards, one for each kind of marker:
+
+| Card               | What it shows                                                                                                                             |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `normalizeMessage` | `-` and `+`: a pseudocode line was replaced, and its mapped source line changed.                                                          |
+| `legacySlug`       | A removed function: every line is marked `-`.                                                                                             |
+| `formatLabel`      | `~`: the pseudocode is the same, but the source it maps to changed.                                                                       |
+| `stableGreeting`   | No marker: the pseudocode was reworded, but the source did not change. An identical function, `copiedGreeting`, was added right above it. |
+
+The "Remaining source changes" section lists the changes that have no card: the added `copiedGreeting`, the changed `uncoveredHelper`, and the `FORMAT_VERSION` constant, which is outside any function.
+
+## Build a report
+
+Each mode has its own builder. Both take a manifest and an output path:
 
 ```sh
-pnpm example:pr
+node src/build.cjs path/to/manifest.json path/to/report.html      # execution slice
+node src/build-pr.cjs path/to/manifest.json path/to/report.html   # PR change
 ```
 
-Open `dist/pr-change.html`. It demonstrates added, removed and source-backed modification markers, a wording-only edit that stays neutral, and a collapsed remainder for source changes without pseudocode cards.
+Source snapshot paths and referenced JSON files resolve relative to the manifest. The manifest formats are in [docs/MANIFEST.md](docs/MANIFEST.md) (execution slice) and [docs/PR-CHANGE-MODE.md](docs/PR-CHANGE-MODE.md) (PR change).
 
-To build another report, pass a manifest and output path to the builder:
+To review a real pull request, [docs/PR-PREPARATION.md](docs/PR-PREPARATION.md) shows how to extract the changed functions from two Git revisions, author and validate the cards, and build the report.
 
-```sh
-node src/build.cjs path/to/manifest.json path/to/report.html
-```
+## Limits
 
-PR-change reports use their own builder:
+- The repository does not run a model. Pseudocode and mappings are authored by a model or a person, following the generation and verification documents below.
+- The extractor finds function declarations, class and object methods, constructors and function-valued variables in `.ts`, `.tsx`, `.mts` and `.cts` files.
+- A mapping must point inside the displayed function. Mappings to other functions or files are not supported yet.
+- Tests, evals, fixtures and helpers are always left out of reports.
+- A report embeds the source it displays. Keep it as confidential as that source.
 
-```sh
-node src/build-pr.cjs path/to/pr-manifest.json path/to/report.html
-```
+## Documents
 
-Source snapshot paths and referenced flow files are resolved relative to the manifest. See [docs/MANIFEST.md](docs/MANIFEST.md) for the input format.
-
-## Prototype status
-
-This repository contains a working report builder and browser renderer. It also documents an authored generator and verifier workflow, but it does not include an automated LLM runner.
-
-The source extractor currently supports TypeScript function declarations, class methods, and function-valued variables. Packaged reports support mappings within the displayed function. External function and file mapping previews from the original prototype have not been generalized yet.
-
-Generated reports embed the source they display. Handle each report according to the confidentiality of its input source.
-
-## Design documents
-
-- [Manifest format](docs/MANIFEST.md)
-- [Tool modes](docs/MODES.md)
-- [PR-change mode](docs/PR-CHANGE-MODE.md)
-- [PR-change generation](docs/PR-CHANGE-GENERATION.md)
-- [PR-change verification](docs/PR-CHANGE-VERIFICATION.md)
-- [Pseudocode language](docs/PSEUDOCODE-LANGUAGE.md)
-- [Code palettes](docs/CODE-PALETTES.md)
-- [Generation workflow](docs/GENERATION-WORKFLOW.md)
-- [Verification criteria](docs/VERIFICATION.md)
-- [Tool interactions](docs/TOOL-INTERACTIONS.md)
+| Document                                                       | Covers                                                                           |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [MODES.md](docs/MODES.md)                                      | The execution-slice, PR-change and planned function-review modes                 |
+| [MANIFEST.md](docs/MANIFEST.md)                                | The execution-slice manifest                                                     |
+| [PR-CHANGE-MODE.md](docs/PR-CHANGE-MODE.md)                    | The PR-change manifest, markers and report views                                 |
+| [PR-PREPARATION.md](docs/PR-PREPARATION.md)                    | Preparing, validating and building a report for a real pull request              |
+| [PR-CHANGE-GENERATION.md](docs/PR-CHANGE-GENERATION.md)        | How to write PR-change pseudocode and mappings                                   |
+| [PR-CHANGE-VERIFICATION.md](docs/PR-CHANGE-VERIFICATION.md)    | How to check PR-change cards before building                                     |
+| [PSEUDOCODE-LANGUAGE.md](docs/PSEUDOCODE-LANGUAGE.md)          | The pseudocode notation shared by both modes                                     |
+| [SLICE-INSTRUCTIONS.md](docs/SLICE-INSTRUCTIONS.md)            | Which execution the current slice follows, and the `▹` caption                   |
+| [GENERATION-WORKFLOW.md](docs/GENERATION-WORKFLOW.md)          | The generator and verifier roles for execution slices                            |
+| [VERIFICATION.md](docs/VERIFICATION.md)                        | How to check an execution slice                                                  |
+| [TOOL-INTERACTIONS.md](docs/TOOL-INTERACTIONS.md)              | How the execution-slice report looks and responds                                |
+| [CODE-PALETTES.md](docs/CODE-PALETTES.md)                      | The code color palettes                                                          |
+| [RULES.md](docs/RULES.md)                                      | Which document each kind of rule belongs in                                      |

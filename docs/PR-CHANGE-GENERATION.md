@@ -18,4 +18,4 @@ Use `null` for the missing side of an added or removed function. Keep the existi
 
 ## Coverage
 
-Every changed symbol without a card remains visible in the report remainder. This lets generation prioritize useful explanations without making the unselected source disappear.
+Every changed function without a card is still listed under Remaining source changes. Generation can focus on the functions that explain the PR without hiding the rest.
