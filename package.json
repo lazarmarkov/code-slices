@@ -2,11 +2,12 @@
   "name": "code-slices",
   "version": "0.1.0",
   "private": true,
-  "description": "Build standalone code-review reports around selected execution slices.",
+  "description": "Build standalone HTML reports that explain changed TypeScript code with source-mapped pseudocode.",
   "scripts": {
-    "example": "node src/build.cjs examples/minimal/manifest.json dist/example.html",
+    "example": "node src/build.cjs examples/execution-slice/manifest.json dist/example.html",
     "example:pr": "node src/build-pr.cjs examples/pr-change/manifest.json dist/pr-change.html",
-    "test:pr": "node --test test/pr-mode.test.cjs"
+    "example:palettes": "node src/build-palette-preview.cjs examples/pr-change/manifest.json normalizeMessage dist/palettes.html",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"

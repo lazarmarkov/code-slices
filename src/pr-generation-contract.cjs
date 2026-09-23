@@ -1,4 +1,7 @@
 const ts = require('typescript');
+const { isTypeScriptFile } = require('./source-model.cjs');
+
+// The instructions a model receives in generation, verification and repair packets.
 
 const AUTHORING_RULES = `The packet and card skeleton are the complete tool authoring interface. Do not inspect the builder, renderer, source extractor, or tool schema docs. If the supplied application contracts are insufficient, inspect only the missing business contract.
 
@@ -9,14 +12,17 @@ const AUTHORING_RULES = `The packet and card skeleton are the complete tool auth
 - Preserve null and existence semantics exactly. Do not replace a null or object guard with generic truthiness.
 - Omit a parameter or field annotation whose whole type is string, number or bool. Write a parameter or field that may be null or undefined with ? instead of the union (warehouseRaw? for warehouseRaw?: string | null, warehouseRef?: WarehouseRef for warehouseRef: WarehouseRef | null). Keep other unions, arrays, generics, named types and every return type. Use bool. Predicate aliases may end in ?. Use .in?(a, b) for membership; status(a | b) only lists return variants. map(field) is field projection. a..b is inclusive. Express negated guards with if !condition. Use postfix if guards only when they preserve the source guard. Keep explicit assignment and do not use implicit returns or calls.`;
 
+// Identifiers that usually carry routine tenant or organization scope, such as orgId or tenant_id.
 const scopeIdentifierPattern = /\b(?:org(?:anization)?_?ids?|tenant_?ids?)\b/gi;
 
 function identifiers(text) {
   return new Set(text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || []);
 }
 
+// The imports and top-level types and constants of `text` that `functionCode` uses, directly or
+// through another selected declaration. Function-valued constants are left out.
 function referencedContracts(file, text, functionCode) {
-  if (!text || !/\.(?:[cm]?ts|tsx)$/.test(file)) return { imports: [], declarations: [] };
+  if (!text || !isTypeScriptFile(file)) return { imports: [], declarations: [] };
   const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const referenced = identifiers(functionCode);
   const declarations = new Map();
@@ -24,7 +30,9 @@ function referencedContracts(file, text, functionCode) {
 
   for (const statement of sourceFile.statements) {
     if (
-      (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isEnumDeclaration(statement)) &&
+      (ts.isTypeAliasDeclaration(statement) ||
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isEnumDeclaration(statement)) &&
       statement.name
     ) {
       declarations.set(statement.name.text, statement.getText(sourceFile));
@@ -52,6 +60,7 @@ function referencedContracts(file, text, functionCode) {
     }
   }
 
+  // Add declarations until no newly selected one references another.
   const selected = new Map();
   let changed = true;
   while (changed) {
@@ -69,17 +78,12 @@ function referencedContracts(file, text, functionCode) {
   };
 }
 
+// The pseudocode lines that name a scope identifier, with the identifiers found on each.
 function scopeIdentifiers(pseudocode) {
-  const matches = [];
-  for (const [index, line] of pseudocode.split('\n').entries()) {
-    scopeIdentifierPattern.lastIndex = 0;
-    const identifiers = new Set();
-    for (const match of line.matchAll(scopeIdentifierPattern)) {
-      identifiers.add(match[0]);
-    }
-    if (identifiers.size) matches.push({ line: index + 1, identifiers: [...identifiers] });
-  }
-  return matches;
+  return pseudocode.split('\n').flatMap((line, index) => {
+    const found = [...new Set(line.match(scopeIdentifierPattern) || [])];
+    return found.length ? [{ line: index + 1, identifiers: found }] : [];
+  });
 }
 
 module.exports = { AUTHORING_RULES, referencedContracts, scopeIdentifiers };

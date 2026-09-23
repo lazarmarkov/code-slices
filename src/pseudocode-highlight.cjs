@@ -1,7 +1,4 @@
-const escapeHtml = (value) =>
-  String(value).replace(/[&<>"']/g, (character) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character],
-  );
+const { escapeHtml } = require('./escape-html.cjs');
 
 const keywords = new Set([
   'append',
@@ -25,7 +22,8 @@ const keywords = new Set([
 ]);
 const types = new Set(['array', 'bool', 'number', 'object', 'readonly', 'string']);
 const literals = new Set(['false', 'null', 'true']);
-const tokenPattern = /(\/\/.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\d[\d_,]*(?:\.\d+)?|→|->|!=|==|<=|>=|&&|\|\||[A-Za-z_][A-Za-z0-9_?]*|\s+|.)/g;
+const tokenPattern =
+  /(\/\/.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\d[\d_,]*(?:\.\d+)?|→|->|!=|==|<=|>=|&&|\|\||[A-Za-z_][A-Za-z0-9_?]*|\s+|.)/g;
 
 function classify(tokens, index) {
   const token = tokens[index];

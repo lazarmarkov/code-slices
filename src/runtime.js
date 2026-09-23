@@ -1,65 +1,304 @@
-import {File,FileDiff} from 'https://esm.sh/@pierre/diffs@1.2.10?bundle';
-const data=JSON.parse(document.getElementById('review-data').textContent);
-const theme={light:'github-light',dark:'github-dark'};
-const options={theme,themeType:'light',overflow:'wrap',disableFileHeader:true};
-const state={revision:localStorage.getItem('code-slices-revision')||'after',mode:localStorage.getItem('code-slices-view')||'pseudo'};
-if(!['after','before','changes'].includes(state.revision))state.revision='after';
-if(!['pseudo','split'].includes(state.mode))state.mode='pseudo';
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const pathLink=(file,line,rev='after')=>(data.repositoryURL?data.repositoryURL.replace(/\/$/,'')+'/blob/':'#')+(rev==='before'?data.base:data.head)+'/'+file+'#L'+line;
-const makeFile=(container,name,contents)=>new File(options).render({containerWrapper:container,file:{name,contents}});
-const makeDiff=(container,name,before,after)=>new FileDiff({...options,diffStyle:'split'}).render({containerWrapper:container,oldFile:{name,contents:before||''},newFile:{name,contents:after||''}});
-function rootOf(container){return container?.querySelector('diffs-container')?.shadowRoot}
-function range(root,lines){return lines.flatMap(line=>[...root.querySelectorAll('[data-line="'+line+'"],[data-column-number="'+line+'"]')])}
-function numbers(r){return Array.from({length:r[1]-r[0]+1},(_,i)=>r[0]+i)}
-function decorate(root){const style=document.createElement('style');style.textContent='[data-paired]{background:#dcfce7!important;box-shadow:inset 3px 0 #16a34a}';root.append(style)}
-function closePreviews(){document.querySelectorAll('.source-preview').forEach(n=>n.remove())}
-function preview(card,source,mapping){
- closePreviews();const pane=card.querySelector('.source-pane');if(state.mode!=='split'||!pane)return;
- const rect=pane.getBoundingClientRect();const overlay=document.createElement('section');overlay.className='source-preview';
- const start=Math.max(1,mapping.source[0]-2),end=Math.min(source.code.split('\n').length,mapping.source[1]+2);
- const abs=source.line+mapping.source[0]-1;overlay.style.left=Math.max(8,rect.left)+'px';overlay.style.width=Math.min(rect.width,innerWidth-rect.left-12)+'px';overlay.style.top='90px';
- overlay.innerHTML='<div class="preview-header"><a target="_blank" href="'+pathLink(card.dataset.file,abs,state.revision)+'">'+esc(card.dataset.symbol)+' · '+esc(card.dataset.file)+':'+abs+'</a><button aria-label="Close source preview">Close</button></div><div class="muted">Excerpt starts at source line '+(source.line+start-1)+'</div><div class="preview-code"></div>';
- card.append(overlay);overlay.querySelector('button').onclick=()=>overlay.remove();const container=overlay.querySelector('.preview-code');makeFile(container,card.dataset.file,source.code.split('\n').slice(start-1,end).join('\n'));
- requestAnimationFrame(()=>{const root=rootOf(container);if(!root)return;decorate(root);for(const n of range(root,numbers(mapping.source).map(n=>n-start+1)))n.setAttribute('data-paired','');});
+import { File, FileDiff } from 'https://esm.sh/@pierre/diffs@1.2.10?bundle';
+
+const data = JSON.parse(document.getElementById('review-data').textContent);
+const options = {
+  theme: { light: 'github-light', dark: 'github-dark' },
+  themeType: 'light',
+  overflow: 'wrap',
+  disableFileHeader: true,
+};
+
+// Revision: which pseudocode to show. Mode: pseudocode alone, or split with the source.
+const REVISIONS = ['after', 'before', 'changes'];
+const MODES = ['pseudo', 'split'];
+const state = {
+  revision: localStorage.getItem('code-slices-revision'),
+  mode: localStorage.getItem('code-slices-view'),
+};
+if (!REVISIONS.includes(state.revision)) state.revision = 'after';
+if (!MODES.includes(state.mode)) state.mode = 'pseudo';
+
+const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => entities[character]);
+const functionName = (entry) => `${entry.className ? `${entry.className}.` : ''}${entry.symbol}`;
+const withFinalNewline = (contents) => (contents && !contents.endsWith('\n') ? `${contents}\n` : contents || '');
+
+// A commit-pinned GitHub link when the manifest has repositoryURL; otherwise a local anchor.
+function sourceLink(file, line, revision = 'after') {
+  const root = data.repositoryURL ? `${data.repositoryURL.replace(/\/$/, '')}/blob/` : '#';
+  return `${root}${revision === 'before' ? data.base : data.head}/${file}#L${line}`;
 }
-function attachPair(card,source,mappings){
- const pseudo=rootOf(card.querySelector('.pseudo-code')),original=rootOf(card.querySelector('.source-code'));if(!pseudo||!original)return;
- decorate(pseudo);decorate(original);
- const style=document.createElement('style');style.textContent='[data-line="1"],[data-line="1"] *{font-family:system-ui,sans-serif!important;font-style:italic;color:#686868!important}[data-line="1"]{padding-bottom:4px}';pseudo.append(style);
- const align=document.createElement('style');align.textContent='[data-line="1"],[data-column-number="1"]{margin-top:calc(1lh + 4px)}';original.append(align);
- pseudo.querySelector('[data-line="1"]')?.setAttribute('title','Describes the conditions and outcome followed in this example. The pseudocode hides parts of the function not exercised by this example.');
- const clear=()=>{for(const root of [pseudo,original])root.querySelectorAll('[data-paired]').forEach(n=>n.removeAttribute('data-paired'));};
- for(const [root,side] of [[pseudo,'pseudo'],[original,'source']])root.addEventListener('pointerover',e=>{
- const row=e.target.closest?.('[data-line],[data-column-number]');if(!row)return;const line=Number(row.dataset.line||row.dataset.columnNumber);clear();closePreviews();
- const matched=(mappings||[]).filter(m=>{const r=m[side];return r&&line>=(side==='pseudo'?r[0]+1:r[0])&&line<=(side==='pseudo'?r[1]+1:r[1]);});
- for(const m of matched){for(const n of range(pseudo,numbers(m.pseudo).map(n=>n+1)))n.setAttribute('data-paired','');if(m.source)for(const n of range(original,numbers(m.source)))n.setAttribute('data-paired','');}
- if(side==='pseudo'&&matched.length){const m=matched.find(m=>m.source&&numbers(m.source).some(n=>{const r=original.querySelector('[data-line="'+n+'"]')?.getBoundingClientRect();return !r||r.top<65||r.bottom>innerHeight-65;}));if(m)preview(card,source,m);}
- });card.addEventListener('pointerleave',()=>{clear();closePreviews()});
+
+function renderFile(container, name, contents) {
+  return new File(options).render({ containerWrapper: container, file: { name, contents } });
 }
-function rawDiff(details,file){let rendered=false;details.addEventListener('toggle',()=>{if(!details.open||rendered)return;rendered=true;makeDiff(details.querySelector('.raw-diff'),file.path,file.before,file.after);});}
-function renderIndex(){
- const el=document.getElementById('coverage-content');el.innerHTML='<table><thead><tr><th>File / changed functions</th><th>Coverage</th></tr></thead><tbody>'+data.files.map((f,i)=>'<tr><td><details id="file-'+i+'"><summary class="file-name">'+esc(f.path)+'</summary><p>'+esc(f.note)+'</p><div class="raw-diff"></div></details>'+(f.changed.length?'<ul class="inventory">'+f.changed.map(s=>'<li>'+(s.card?'<a href="#'+s.card+'">'+esc((s.className?s.className+'.':'')+s.symbol)+'</a>':'<span>'+esc((s.className?s.className+'.':'')+s.symbol)+' <span class="muted">'+(s.removed?'removed · ':'')+'not covered by a slice</span></span>')+'</li>').join('')+'</ul>':'')+'</td><td>'+f.flows.map(id=>'<a href="#'+id+'">'+esc(data.flows.find(x=>x.id===id).title)+'</a>').join('<br>')+(f.flows.length?'':'<span class="muted">'+esc(f.category)+'</span>')+'</td></tr>').join('')+'</tbody></table>';
- data.files.forEach((f,i)=>rawDiff(document.getElementById('file-'+i),f));
- const structural=document.getElementById('structural-content');structural.innerHTML=data.files.filter(f=>f.category==='Structural/support review').map(f=>'<p><a href="#file-'+data.files.indexOf(f)+'" class="file-name">'+esc(f.path)+'</a><br>'+esc(f.note)+'</p>').join('');
+
+function renderDiff(container, name, before, after) {
+  return new FileDiff({ ...options, diffStyle: 'split' }).render({
+    containerWrapper: container,
+    oldFile: { name, contents: withFinalNewline(before) },
+    newFile: { name, contents: withFinalNewline(after) },
+  });
 }
-function renderFlows(){
- closePreviews();document.body.classList.toggle('split',state.mode==='split');const el=document.getElementById('flows');el.replaceChildren();
- for(const [index,flow] of data.flows.entries()){
- const section=document.createElement('section');section.id=flow.id;section.className='flow-heading';section.innerHTML='<h2>'+String(index+1).padStart(2,'0')+' '+esc(flow.title)+'</h2><p>'+esc(flow.description)+'</p><a class="back" href="#coverage">↑ Changed-code index</a><div class="flow-tree"></div><div class="type-layer"></div>';el.append(section);
- const tree=state.revision==='before'?(flow.treeBefore||'Before this PR: '+(flow.cards.some(c=>c.before)?'see the existing function implementations below.':'these model APIs do not exist.')):flow.tree;
- makeFile(section.querySelector('.flow-tree'),flow.id+'.call-tree.txt',tree);
- const typeRev=state.revision==='before'?'base':'head';const content=flow.tree+' '+flow.cards.map(c=>c.after).join(' ');for(const [name,type] of Object.entries(data.types[typeRev]))if(new RegExp('\\b'+name+'\\b').test(content)){const entry=document.createElement('div');section.querySelector('.type-layer').append(entry);makeFile(entry,type.file+' · '+name,type.code);}
- for(const c of flow.cards){const card=document.createElement('article');card.id=c.id;card.className='fn';card.dataset.file=c.file;card.dataset.symbol=c.symbol;const rev=state.revision==='before'?'before':'after',source=rev==='before'?c.sourceBefore:c.sourceAfter;const pseudo=rev==='before'?c.before:c.after;const gauge=rev==='before'?c.visibilityBefore:c.visibilityAfter;
- card.innerHTML='<div class="fn-header"><a target="_blank" href="'+pathLink(c.file,source?.line||c.sourceAfter.line,source?rev:'after')+'">'+esc(c.file)+':'+(source?.line||c.sourceAfter.line)+'</a><span class="tag">'+c.status+'</span>'+(state.revision!=='changes'&&gauge?.show?'<span class="gauge" title="'+gauge.hidden+' of '+gauge.total+' nonblank, non-Logger.log source lines have no mapping. This estimates representation, not execution coverage."><span class="dot"></span>'+gauge.percent+'% hidden · '+gauge.hidden+' LoC</span>':'')+'</div><div class="panes"><div class="code-pane"><div class="pane-label">'+(state.revision==='changes'?'Pseudocode changes':'Pseudocode')+'</div><div class="code pseudo-code"></div></div><div class="code-pane source-pane"><div class="pane-label">'+(state.revision==='changes'?'Source changes':'Original source')+'</div><div class="code source-code"></div></div></div><div class="fn-footer"><span class="muted">'+esc(c.change||c.note||'')+'</span></div>';el.append(card);
- const pseudoNode=card.querySelector('.pseudo-code'),sourceNode=card.querySelector('.source-code');
- if(state.revision==='changes'){makeDiff(pseudoNode,c.symbol+'.pseudo.ts',c.before,c.after);makeDiff(sourceNode,c.file,c.sourceBefore?.code,c.sourceAfter.code);}
- else if(!source||pseudo===null||pseudo===undefined){pseudoNode.innerHTML='<div class="empty">Added in this PR. No Before implementation.</div>';sourceNode.innerHTML='<div class="empty">This function did not exist at the base revision.</div>';}
- else {makeFile(pseudoNode,c.symbol+'.pseudo.ts','▹ '+(rev==='before'?(c.scenarioBefore||c.scenario):c.scenario)+'\n'+pseudo);makeFile(sourceNode,c.file,source.code);requestAnimationFrame(()=>attachPair(card,source,rev==='before'?c.mappingsBefore:c.mappingsAfter));}
- }
- }
- document.querySelectorAll('[data-revision]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.revision===state.revision)));document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===state.mode)));document.documentElement.dataset.ready='true';
+
+const shadowRootOf = (container) => container?.querySelector('diffs-container')?.shadowRoot;
+const rowsForLines = (root, lines) =>
+  lines.flatMap((line) => [...root.querySelectorAll(`[data-line="${line}"],[data-column-number="${line}"]`)]);
+const linesOf = ([first, last]) => Array.from({ length: last - first + 1 }, (_, index) => first + index);
+
+function addStyle(root, css) {
+  const style = document.createElement('style');
+  style.textContent = css;
+  root.append(style);
 }
-document.querySelectorAll('[data-revision]').forEach(b=>b.onclick=()=>{state.revision=b.dataset.revision;localStorage.setItem('code-slices-revision',state.revision);renderFlows()});document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{state.mode=b.dataset.mode;localStorage.setItem('code-slices-view',state.mode);renderFlows()});
-window.addEventListener('keydown',e=>{if(e.key==='Alt')document.body.classList.add('types-expanded');if(e.key==='Escape')closePreviews()});window.addEventListener('keyup',e=>{if(e.key==='Alt'||!e.altKey)document.body.classList.remove('types-expanded')});window.addEventListener('blur',()=>document.body.classList.remove('types-expanded'));
-renderIndex();renderFlows();
+
+const addPairedStyle = (root) =>
+  addStyle(root, '[data-paired]{background:#dcfce7!important;box-shadow:inset 3px 0 #16a34a}');
+
+function closePreviews() {
+  document.querySelectorAll('.source-preview').forEach((node) => node.remove());
+}
+
+// In split view, shows mapped source that is scrolled out of sight in a floating excerpt.
+function openPreview(card, source, mapping) {
+  closePreviews();
+  const pane = card.querySelector('.source-pane');
+  if (state.mode !== 'split' || !pane) return;
+  const rect = pane.getBoundingClientRect();
+  const sourceLines = source.code.split('\n');
+  const start = Math.max(1, mapping.source[0] - 2);
+  const end = Math.min(sourceLines.length, mapping.source[1] + 2);
+  const fileLine = source.line + mapping.source[0] - 1;
+  const overlay = document.createElement('section');
+  overlay.className = 'source-preview';
+  overlay.style.left = `${Math.max(8, rect.left)}px`;
+  overlay.style.width = `${Math.min(rect.width, innerWidth - rect.left - 12)}px`;
+  overlay.style.top = '90px';
+  overlay.innerHTML = `<div class="preview-header"><a target="_blank" href="${sourceLink(card.dataset.file, fileLine, state.revision)}">${escapeHtml(card.dataset.symbol)} · ${escapeHtml(card.dataset.file)}:${fileLine}</a><button aria-label="Close source preview">Close</button></div><div class="muted">Excerpt starts at source line ${source.line + start - 1}</div><div class="preview-code"></div>`;
+  card.append(overlay);
+  overlay.querySelector('button').onclick = () => overlay.remove();
+  const container = overlay.querySelector('.preview-code');
+  renderFile(container, card.dataset.file, sourceLines.slice(start - 1, end).join('\n'));
+  requestAnimationFrame(() => {
+    const root = shadowRootOf(container);
+    if (!root) return;
+    addPairedStyle(root);
+    const excerptLines = linesOf(mapping.source).map((line) => line - start + 1);
+    for (const node of rowsForLines(root, excerptLines)) node.setAttribute('data-paired', '');
+  });
+}
+
+// Pseudocode line 1 is the ▹ caption, so pseudocode line n renders as line n + 1.
+function attachPairing(card, source, mappings) {
+  const pseudo = shadowRootOf(card.querySelector('.pseudo-code'));
+  const original = shadowRootOf(card.querySelector('.source-code'));
+  if (!pseudo || !original) return;
+  addPairedStyle(pseudo);
+  addPairedStyle(original);
+  addStyle(
+    pseudo,
+    '[data-line="1"],[data-line="1"] *{font-family:system-ui,sans-serif!important;font-style:italic;color:#686868!important}[data-line="1"]{padding-bottom:4px}',
+  );
+  // Push the source down one line so both signatures share a row.
+  addStyle(original, '[data-line="1"],[data-column-number="1"]{margin-top:calc(1lh + 4px)}');
+  pseudo
+    .querySelector('[data-line="1"]')
+    ?.setAttribute(
+      'title',
+      'Describes the conditions and outcome followed in this example. The pseudocode hides parts of the function not exercised by this example.',
+    );
+  const clear = () => {
+    for (const root of [pseudo, original]) {
+      root.querySelectorAll('[data-paired]').forEach((node) => node.removeAttribute('data-paired'));
+    }
+  };
+  for (const [root, side] of [
+    [pseudo, 'pseudo'],
+    [original, 'source'],
+  ]) {
+    root.addEventListener('pointerover', (event) => {
+      const row = event.target.closest?.('[data-line],[data-column-number]');
+      if (!row) return;
+      const line = Number(row.dataset.line || row.dataset.columnNumber);
+      clear();
+      closePreviews();
+      const offset = side === 'pseudo' ? 1 : 0;
+      const matched = (mappings || []).filter((mapping) => {
+        const range = mapping[side];
+        return range && line >= range[0] + offset && line <= range[1] + offset;
+      });
+      for (const mapping of matched) {
+        for (const node of rowsForLines(
+          pseudo,
+          linesOf(mapping.pseudo).map((n) => n + 1),
+        ))
+          node.setAttribute('data-paired', '');
+        if (mapping.source)
+          for (const node of rowsForLines(original, linesOf(mapping.source))) node.setAttribute('data-paired', '');
+      }
+      if (side !== 'pseudo') return;
+      const offscreen = matched.find(
+        (mapping) =>
+          mapping.source &&
+          linesOf(mapping.source).some((n) => {
+            const rect = original.querySelector(`[data-line="${n}"]`)?.getBoundingClientRect();
+            return !rect || rect.top < 65 || rect.bottom > innerHeight - 65;
+          }),
+      );
+      if (offscreen) openPreview(card, source, offscreen);
+    });
+  }
+  card.addEventListener('pointerleave', () => {
+    clear();
+    closePreviews();
+  });
+}
+
+// Renders a file's exact diff the first time its <details> opens.
+function renderDiffOnOpen(details, file) {
+  let rendered = false;
+  details.addEventListener('toggle', () => {
+    if (!details.open || rendered) return;
+    rendered = true;
+    renderDiff(details.querySelector('.raw-diff'), file.path, file.before, file.after);
+  });
+}
+
+function renderIndex() {
+  const changedItem = (symbol) => {
+    const name = escapeHtml(functionName(symbol));
+    if (symbol.card) return `<li><a href="#${symbol.card}">${name}</a></li>`;
+    return `<li><span>${name} <span class="muted">${symbol.removed ? 'removed · ' : ''}not covered by a slice</span></span></li>`;
+  };
+  const coverage = (file) =>
+    file.flows.length
+      ? file.flows
+          .map((id) => `<a href="#${id}">${escapeHtml(data.flows.find((flow) => flow.id === id).title)}</a>`)
+          .join('<br>')
+      : `<span class="muted">${escapeHtml(file.category)}</span>`;
+  const rows = data.files.map(
+    (file, index) =>
+      `<tr><td><details id="file-${index}"><summary class="file-name">${escapeHtml(file.path)}</summary><p>${escapeHtml(file.note)}</p><div class="raw-diff"></div></details>${file.changed.length ? `<ul class="inventory">${file.changed.map(changedItem).join('')}</ul>` : ''}</td><td>${coverage(file)}</td></tr>`,
+  );
+  document.getElementById('coverage-content').innerHTML =
+    `<table><thead><tr><th>File / changed functions</th><th>Coverage</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+  data.files.forEach((file, index) => renderDiffOnOpen(document.getElementById(`file-${index}`), file));
+
+  const supporting = data.files
+    .map((file, index) => ({ file, index }))
+    .filter(({ file }) => file.category === 'Structural/support review');
+  document.getElementById('structural-content').innerHTML = supporting.length
+    ? supporting
+        .map(
+          ({ file, index }) =>
+            `<p><a href="#file-${index}" class="file-name">${escapeHtml(file.path)}</a><br>${escapeHtml(file.note)}</p>`,
+        )
+        .join('')
+    : '<p class="muted">No supporting changes.</p>';
+}
+
+function renderTypes(section, flow) {
+  const revision = state.revision === 'before' ? 'base' : 'head';
+  const content = `${flow.tree} ${flow.cards.map((card) => card.after).join(' ')}`;
+  for (const [name, type] of Object.entries(data.types[revision])) {
+    if (!new RegExp(`\\b${name}\\b`).test(content)) continue;
+    const entry = document.createElement('div');
+    section.querySelector('.type-layer').append(entry);
+    renderFile(entry, `${type.file} · ${name}`, type.code);
+  }
+}
+
+function renderCard(container, entry) {
+  const changes = state.revision === 'changes';
+  const revision = state.revision === 'before' ? 'before' : 'after';
+  const source = revision === 'before' ? entry.sourceBefore : entry.sourceAfter;
+  const pseudocode = revision === 'before' ? entry.before : entry.after;
+  const gauge = revision === 'before' ? entry.visibilityBefore : entry.visibilityAfter;
+  const line = source?.line || entry.sourceAfter.line;
+  const card = document.createElement('article');
+  card.id = entry.id;
+  card.className = 'fn';
+  card.dataset.file = entry.file;
+  card.dataset.symbol = entry.symbol;
+  const gaugeHtml =
+    !changes && gauge?.show
+      ? `<span class="gauge" title="${gauge.hidden} of ${gauge.total} nonblank, non-Logger.log source lines have no mapping. This estimates representation, not execution coverage."><span class="dot"></span>${gauge.percent}% hidden · ${gauge.hidden} LoC</span>`
+      : '';
+  card.innerHTML = `<div class="fn-header"><a target="_blank" href="${sourceLink(entry.file, line, source ? revision : 'after')}">${escapeHtml(entry.file)}:${line}</a><span class="tag">${entry.status}</span>${gaugeHtml}</div><div class="panes"><div class="code-pane"><div class="pane-label">${changes ? 'Pseudocode changes' : 'Pseudocode'}</div><div class="code pseudo-code"></div></div><div class="code-pane source-pane"><div class="pane-label">${changes ? 'Source changes' : 'Original source'}</div><div class="code source-code"></div></div></div><div class="fn-footer"><span class="muted">${escapeHtml(entry.change || entry.note || '')}</span></div>`;
+  container.append(card);
+
+  const pseudoNode = card.querySelector('.pseudo-code');
+  const sourceNode = card.querySelector('.source-code');
+  if (changes) {
+    renderDiff(pseudoNode, `${entry.symbol}.pseudo.ts`, entry.before, entry.after);
+    renderDiff(sourceNode, entry.file, entry.sourceBefore?.code, entry.sourceAfter.code);
+  } else if (!source || pseudocode == null) {
+    pseudoNode.innerHTML = '<div class="empty">Added in this PR. No Before implementation.</div>';
+    sourceNode.innerHTML = '<div class="empty">This function did not exist at the base revision.</div>';
+  } else {
+    const caption = revision === 'before' ? entry.scenarioBefore || entry.scenario : entry.scenario;
+    renderFile(pseudoNode, `${entry.symbol}.pseudo.ts`, `▹ ${caption}\n${pseudocode}`);
+    renderFile(sourceNode, entry.file, source.code);
+    const mappings = revision === 'before' ? entry.mappingsBefore : entry.mappingsAfter;
+    requestAnimationFrame(() => attachPairing(card, source, mappings));
+  }
+}
+
+function renderFlows() {
+  closePreviews();
+  document.body.classList.toggle('split', state.mode === 'split');
+  const container = document.getElementById('flows');
+  container.replaceChildren();
+  for (const [index, flow] of data.flows.entries()) {
+    const section = document.createElement('section');
+    section.id = flow.id;
+    section.className = 'flow-heading';
+    section.innerHTML = `<h2>${String(index + 1).padStart(2, '0')} ${escapeHtml(flow.title)}</h2><p>${escapeHtml(flow.description)}</p><a class="back" href="#coverage">↑ Changed-code index</a><div class="flow-tree"></div><div class="type-layer"></div>`;
+    container.append(section);
+    const beforeTree =
+      flow.treeBefore ||
+      `Before this PR: ${flow.cards.some((card) => card.before) ? 'see the existing function implementations below.' : 'these model APIs do not exist.'}`;
+    renderFile(
+      section.querySelector('.flow-tree'),
+      `${flow.id}.call-tree.txt`,
+      state.revision === 'before' ? beforeTree : flow.tree,
+    );
+    renderTypes(section, flow);
+    for (const entry of flow.cards) renderCard(container, entry);
+  }
+  document
+    .querySelectorAll('[data-revision]')
+    .forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.revision === state.revision)));
+  document
+    .querySelectorAll('[data-mode]')
+    .forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)));
+  document.documentElement.dataset.ready = 'true';
+}
+
+document.querySelectorAll('[data-revision]').forEach((button) => {
+  button.onclick = () => {
+    state.revision = button.dataset.revision;
+    localStorage.setItem('code-slices-revision', state.revision);
+    renderFlows();
+  };
+});
+document.querySelectorAll('[data-mode]').forEach((button) => {
+  button.onclick = () => {
+    state.mode = button.dataset.mode;
+    localStorage.setItem('code-slices-view', state.mode);
+    renderFlows();
+  };
+});
+
+// Hold Alt (Option) to show the type definitions used by each flow.
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Alt') document.body.classList.add('types-expanded');
+  if (event.key === 'Escape') closePreviews();
+});
+window.addEventListener('keyup', (event) => {
+  if (event.key === 'Alt' || !event.altKey) document.body.classList.remove('types-expanded');
+});
+window.addEventListener('blur', () => document.body.classList.remove('types-expanded'));
+
+renderIndex();
+renderFlows();

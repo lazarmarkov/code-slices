@@ -27,7 +27,9 @@ test('palette roles are shared by pseudocode and TypeScript tokenizers', () => {
   for (const palette of palettes) {
     for (const role of roles) assert.match(palette[role], /^#[0-9A-F]{6}$/);
   }
-  const source = highlightTypeScript('export function parse(value: string): Result { return decode("ok", value); }').join('\n');
+  const source = highlightTypeScript(
+    'export function parse(value: string): Result { return decode("ok", value); }',
+  ).join('\n');
   assert.match(source, /tok-keyword">export/);
   assert.match(source, /tok-call">parse/);
   assert.match(source, /tok-type">string/);
@@ -64,11 +66,9 @@ test('explicit null owner selects a top-level function', () => {
 
 test('synthetic report grounds markers in exact extracted functions', () => {
   const output = path.join(os.tmpdir(), `code-slices-pr-${process.pid}.html`);
-  execFileSync(
-    process.execPath,
-    ['src/build-pr.cjs', 'examples/pr-change/manifest.json', output],
-    { cwd: path.resolve(__dirname, '..') },
-  );
+  execFileSync(process.execPath, ['src/build-pr.cjs', 'examples/pr-change/manifest.json', output], {
+    cwd: path.resolve(__dirname, '..'),
+  });
   const html = fs.readFileSync(output, 'utf8');
   const data = JSON.parse(html.match(/<script type="application\/json" id="review-data">(.*?)<\/script>/s)[1]);
   const cards = new Map(data.cards.map((card) => [card.id, card]));
@@ -78,15 +78,54 @@ test('synthetic report grounds markers in exact extracted functions', () => {
   assert.deepEqual(cards.get('normalize-message').markerCounts, { added: 1, removed: 1, modified: 0 });
   assert.deepEqual(cards.get('legacy-slug').markerCounts, { added: 0, removed: 2, modified: 0 });
   assert.deepEqual(cards.get('format-label').markerCounts, { added: 0, removed: 0, modified: 1 });
-  assert.deepEqual(cards.get('stable-greeting-grounding-guard').markerCounts, {
-    added: 0,
-    removed: 0,
-    modified: 0,
-  });
+  // Reworded pseudocode over unchanged source stays neutral, even beside an identical added function.
+  assert.equal(cards.get('stable-greeting').status, 'Context');
+  assert.deepEqual(cards.get('stable-greeting').markerCounts, { added: 0, removed: 0, modified: 0 });
+  // A removed function has no signature edit to report.
+  assert.deepEqual(
+    cards.get('legacy-slug').pseudoRows.map((row) => row.evidenceKind),
+    [null, null],
+  );
+  assert.deepEqual(
+    cards.get('format-label').pseudoRows.map((row) => row.evidenceKind),
+    [null, 'implementation'],
+  );
   assert.ok(
     data.files[0].unrepresented.some((symbol) => symbol.symbol === 'copiedGreeting'),
     'the adjacent helper remains explicit in the remainder',
   );
+});
+
+test('cardOrder puts listed cards first and keeps the rest in input order', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'code-slices-order-'));
+  const example = path.resolve(__dirname, '../examples/pr-change');
+  const manifest = JSON.parse(fs.readFileSync(path.join(example, 'manifest.json'), 'utf8'));
+  manifest.sources = { base: path.join(example, 'base'), head: path.join(example, 'head') };
+  manifest.cardOrder = ['stable-greeting', 'format-label'];
+  fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify(manifest));
+  const output = path.join(root, 'report.html');
+  execFileSync(process.execPath, ['src/build-pr.cjs', path.join(root, 'manifest.json'), output], {
+    cwd: path.resolve(__dirname, '..'),
+  });
+  const html = fs.readFileSync(output, 'utf8');
+  const data = JSON.parse(html.match(/<script type="application\/json" id="review-data">(.*?)<\/script>/s)[1]);
+  assert.deepEqual(
+    data.cards.map((card) => card.id),
+    ['stable-greeting', 'format-label', 'normalize-message', 'legacy-slug'],
+  );
+});
+
+test('palette preview builds from inline cards', () => {
+  const output = path.join(os.tmpdir(), `code-slices-palettes-${process.pid}.html`);
+  const stdout = execFileSync(
+    process.execPath,
+    ['src/build-palette-preview.cjs', 'examples/pr-change/manifest.json', 'normalizeMessage', output],
+    { cwd: path.resolve(__dirname, '..'), encoding: 'utf8' },
+  );
+  assert.equal(JSON.parse(stdout).palettes, palettes.length);
+  const html = fs.readFileSync(output, 'utf8');
+  for (const palette of palettes) assert.match(html, new RegExp(`data-palette="${palette.id}"`));
+  assert.match(html, /tok-call">toLowerCase/);
 });
 
 test('report excludes helper files and their source', () => {

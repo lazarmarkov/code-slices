@@ -19,7 +19,17 @@ function write(repo, file, contents) {
 
 function commit(repo, message) {
   git(repo, ['add', '.']);
-  git(repo, ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', 'commit', '-m', message]);
+  git(repo, [
+    '-c',
+    'user.name=Test',
+    '-c',
+    'user.email=test@example.com',
+    '-c',
+    'commit.gpgsign=false',
+    'commit',
+    '-m',
+    message,
+  ]);
   return git(repo, ['rev-parse', 'HEAD']);
 }
 
@@ -91,11 +101,10 @@ test('prepares pinned changed functions and excludes test paths', () => {
   assert.match(packet, /\+\s+1 \| export function added/);
   assert.doesNotMatch(packet, /testOnly|fixtureOnly|helperOnly/);
 
-  const skeletonValidation = spawnSync(
-    process.execPath,
-    ['src/validate-pr-cards.cjs', output, 'cards.json'],
-    { cwd: project, encoding: 'utf8' },
-  );
+  const skeletonValidation = spawnSync(process.execPath, ['src/validate-pr-cards.cjs', output, 'cards.json'], {
+    cwd: project,
+    encoding: 'utf8',
+  });
   assert.equal(skeletonValidation.status, 1);
   assert.match(skeletonValidation.stdout, /full-function pseudocode is required/);
 
@@ -118,14 +127,16 @@ test('prepares pinned changed functions and excludes test paths', () => {
   const scopedCards = structuredClone(cards);
   scopedCards[0].after = `${scopedCards[0].symbol}(orgId, tenant_id)`;
   fs.writeFileSync(path.join(output, 'scoped.json'), `${JSON.stringify({ cards: scopedCards }, null, 2)}\n`);
+  // A relative repair path resolves against the prepared directory, like the cards path.
   const repairOutput = path.join(output, 'repair.json');
   const scopedValidation = spawnSync(
     process.execPath,
-    ['src/validate-pr-cards.cjs', output, 'scoped.json', '--repair-output', repairOutput],
+    ['src/validate-pr-cards.cjs', output, 'scoped.json', '--repair-output', 'repair.json'],
     { cwd: project, encoding: 'utf8' },
   );
   assert.equal(scopedValidation.status, 0);
   const scopedResult = JSON.parse(scopedValidation.stdout);
+  assert.equal(scopedResult.repairOutput, repairOutput);
   assert.equal(scopedResult.warnings.length, 1);
   assert.match(scopedResult.warnings[0], /remove routine ORM tenant\/organization scope/);
   const repair = JSON.parse(fs.readFileSync(repairOutput, 'utf8'));
@@ -137,11 +148,11 @@ test('prepares pinned changed functions and excludes test paths', () => {
   const invalidCards = structuredClone(cards);
   invalidCards[0].mappingsAfter = [{ pseudo: [1, Number.MAX_SAFE_INTEGER], source: [1, 1] }];
   fs.writeFileSync(path.join(output, 'invalid.json'), `${JSON.stringify({ cards: invalidCards }, null, 2)}\n`);
-  const invalidValidation = spawnSync(
-    process.execPath,
-    ['src/validate-pr-cards.cjs', output, 'invalid.json'],
-    { cwd: project, encoding: 'utf8', timeout: 2000 },
-  );
+  const invalidValidation = spawnSync(process.execPath, ['src/validate-pr-cards.cjs', output, 'invalid.json'], {
+    cwd: project,
+    encoding: 'utf8',
+    timeout: 2000,
+  });
   assert.equal(invalidValidation.signal, null);
   assert.equal(invalidValidation.status, 1);
   assert.match(invalidValidation.stdout, /mapping 1 has invalid pseudo range/);
