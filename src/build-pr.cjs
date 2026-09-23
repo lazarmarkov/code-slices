@@ -27,8 +27,9 @@ if (args.length !== 2) {
 const { manifest, readSource, loadEntries } = loadManifest(args[0]);
 
 // The file text with every extracted function cut out, along with the comma that separates it
-// from the object member or declarator before it (or after it, for the first in a list). A line that held only function text is
-// dropped, so adding or removing a whole function leaves the rest unchanged.
+// from the object member or declarator before it (or after it, for the first in a list). A line
+// that held only function text is dropped, so adding or removing a whole function leaves the rest
+// unchanged.
 function textOutsideSymbols(text, symbols) {
   const source = text ?? '';
   const cut = '\u0000';
