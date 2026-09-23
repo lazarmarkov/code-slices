@@ -38,6 +38,21 @@ test('sourceSymbols recognizes constructors and skips non-TypeScript files', () 
   assert.deepEqual(sourceSymbols('example.js', 'function run() {}'), []);
 });
 
+test('sourceSymbols records each function in a multi-declarator statement with its own span', () => {
+  const symbols = sourceSymbols(
+    'example.ts',
+    'export const onOpen = () => {}, onClose = () => {};\nconst handler = () => x, count = 0;',
+  );
+  assert.deepEqual(
+    symbols.map(({ symbol, line, code }) => ({ symbol, line, code })),
+    [
+      { symbol: 'onOpen', line: 1, code: 'onOpen = () => {}' },
+      { symbol: 'onClose', line: 1, code: 'onClose = () => {}' },
+      { symbol: 'handler', line: 2, code: 'handler = () => x' },
+    ],
+  );
+});
+
 test('symbolsByKey rejects two functions with the same owner and name', () => {
   const symbols = sourceSymbols(
     'example.ts',

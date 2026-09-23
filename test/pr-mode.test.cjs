@@ -156,3 +156,38 @@ test('report excludes helper files and their source', () => {
   assert.deepEqual(data.files, []);
   assert.doesNotMatch(html, /helperSecret|before-private|after-private/);
 });
+
+test('report lists functions declared together in one statement', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'code-slices-multi-declarator-'));
+  fs.mkdirSync(path.join(root, 'base'));
+  fs.mkdirSync(path.join(root, 'head'));
+  fs.writeFileSync(
+    path.join(root, 'base', 'events.ts'),
+    'export const onOpen = () => {}, onClose = () => {};\nconst handler = () => x, count = 0;\n',
+  );
+  fs.writeFileSync(
+    path.join(root, 'head', 'events.ts'),
+    'export const onOpen = () => {}, onClose = () => 1;\nconst handler = () => y, count = 0;\n',
+  );
+  fs.writeFileSync(
+    path.join(root, 'manifest.json'),
+    JSON.stringify({
+      title: 'Multi-declarator',
+      baseRef: 'before',
+      headRef: 'after',
+      sources: { base: 'base', head: 'head' },
+      files: ['events.ts'],
+      cards: [],
+    }),
+  );
+  const output = path.join(root, 'report.html');
+  execFileSync(process.execPath, ['src/build-pr.cjs', path.join(root, 'manifest.json'), output], {
+    cwd: path.resolve(__dirname, '..'),
+  });
+  const html = fs.readFileSync(output, 'utf8');
+  const data = JSON.parse(html.match(/<script type="application\/json" id="review-data">(.*?)<\/script>/s)[1]);
+  assert.deepEqual(
+    data.files[0].unrepresented.map(({ symbol }) => symbol),
+    ['onClose', 'handler'],
+  );
+});

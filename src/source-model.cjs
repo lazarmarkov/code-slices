@@ -48,10 +48,8 @@ function sourceSymbols(file, text) {
     ) {
       const declarationList = node.parent;
       const statement = declarationList.parent;
-      if (!ts.isVariableStatement(statement) || declarationList.declarations.length !== 1) {
-        throw new Error(`Unsupported multi-declaration function variable in ${file}: ${node.name.getText(sourceFile)}`);
-      }
-      add(statement, node.name.getText(sourceFile), null, node.initializer.body);
+      const span = ts.isVariableStatement(statement) && declarationList.declarations.length === 1 ? statement : node;
+      add(span, node.name.getText(sourceFile), null, node.initializer.body);
     }
     ts.forEachChild(node, visit);
   }

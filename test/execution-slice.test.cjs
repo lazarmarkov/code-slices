@@ -99,3 +99,18 @@ test('execution-slice reports leave out helper files', () => {
   assert.deepEqual(data.files, []);
   assert.doesNotMatch(html, /helperSecret|before-private|after-private/);
 });
+
+test('execution-slice reports list functions declared together in one statement', () => {
+  const manifest = writeFixture(
+    {
+      'base/events.ts': 'export const onOpen = () => {}, onClose = () => {};\nconst handler = () => x, count = 0;\n',
+      'head/events.ts': 'export const onOpen = () => {}, onClose = () => 1;\nconst handler = () => y, count = 0;\n',
+    },
+    { files: ['events.ts'], flows: [] },
+  );
+  const { data } = build(manifest);
+  assert.deepEqual(data.files[0].changed, [
+    { symbol: 'onClose', className: null, card: null },
+    { symbol: 'handler', className: null, card: null },
+  ]);
+});
