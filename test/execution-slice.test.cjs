@@ -114,3 +114,40 @@ test('execution-slice reports list functions declared together in one statement'
     { symbol: 'handler', className: null, card: null },
   ]);
 });
+
+test('a card with className: null still matches a method', () => {
+  const source = 'export class Worker {\n  run(): number {\n    return 1;\n  }\n}\n';
+  const manifest = writeFixture(
+    { 'base/worker.ts': source, 'head/worker.ts': source },
+    {
+      files: ['worker.ts'],
+      flows: [
+        {
+          id: 'run',
+          title: 'Run',
+          description: '',
+          tree: 'Worker.run()',
+          cards: [
+            {
+              id: 'run-card',
+              file: 'worker.ts',
+              symbol: 'run',
+              className: null,
+              scenario: 'Any worker.',
+              before: null,
+              after: 'run() → number\n  return 1',
+              mappingsAfter: [
+                { pseudo: [1, 1], source: [1, 1] },
+                { pseudo: [2, 2], source: [2, 3] },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  );
+  const { data } = build(manifest);
+  const [card] = data.flows[0].cards;
+  assert.equal(card.sourceAfter.className, 'Worker');
+  assert.equal(card.status, 'Context');
+});

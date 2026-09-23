@@ -2,7 +2,6 @@
 // Builds a PR-change report: authored full-function pseudocode beside the exact TypeScript diff.
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 const { defaultPalette, roles } = require('./code-palettes.cjs');
 const { escapeHtml } = require('./escape-html.cjs');
 const { isExcludedPath } = require('./excluded-paths.cjs');
@@ -25,33 +24,26 @@ if (args.length !== 2) {
   process.exit(1);
 }
 
-const { manifest, sourcePath, readSource, loadEntries } = loadManifest(args[0]);
+const { manifest, readSource, loadEntries } = loadManifest(args[0]);
 
-// The file lines Git reports as deleted (before) and added (after), from zero-context hunks.
-function changedFileLines(beforePath, afterPath) {
-  const oldTarget = fs.existsSync(beforePath) ? beforePath : '/dev/null';
-  const newTarget = fs.existsSync(afterPath) ? afterPath : '/dev/null';
-  const result = spawnSync(
-    'git',
-    ['diff', '--no-index', '--no-ext-diff', '--no-color', '--unified=0', '--', oldTarget, newTarget],
-    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-  );
-  // git diff --no-index exits 1 when the files differ.
-  if (result.status !== 0 && result.status !== 1) {
-    throw new Error(`git diff failed for ${beforePath}: ${result.stderr || `exit ${result.status}`}`);
+// The file text with every extracted function cut out. A line that held only function text is
+// dropped, so adding or removing a whole function leaves the rest unchanged.
+function textOutsideSymbols(text, symbols) {
+  const source = text ?? '';
+  const cut = '\u0000';
+  let kept = '';
+  let cursor = 0;
+  for (const [start, end] of symbols.map((symbol) => symbol.span).sort((left, right) => left[0] - right[0])) {
+    if (end <= cursor) continue;
+    kept += `${source.slice(cursor, Math.max(cursor, start))}${cut}`;
+    cursor = end;
   }
-  const before = new Set();
-  const after = new Set();
-  const addRange = (lines, start, count) => {
-    for (let index = 0; index < count; index += 1) lines.add(start + index);
-  };
-  for (const line of result.stdout.split('\n')) {
-    const match = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
-    if (!match) continue;
-    addRange(before, Number(match[1]), Number(match[2] ?? 1));
-    addRange(after, Number(match[3]), Number(match[4] ?? 1));
-  }
-  return { before, after };
+  kept += source.slice(cursor);
+  return kept
+    .split('\n')
+    .filter((line) => !line.includes(cut) || line.replaceAll(cut, '').trim())
+    .map((line) => line.replaceAll(cut, ''))
+    .join('\n');
 }
 
 function validateMappings(card, revision, pseudocode, mappings, source) {
@@ -129,7 +121,6 @@ for (const input of fileInputs) {
     ...input,
     before,
     after,
-    changes: changedFileLines(sourcePath('base', input.path), sourcePath('head', input.path)),
     symbolsBefore: sourceSymbols(input.path, before),
     symbolsAfter: sourceSymbols(input.path, after),
   });
@@ -186,11 +177,9 @@ const files = [...fileData.values()].map((file) => {
     });
   }
 
-  // A changed line outside every extracted function, such as an import or a constant.
-  const outsideSymbols = (lines, symbols) =>
-    [...lines].some((line) => !symbols.some((symbol) => line >= symbol.line && line <= symbol.end));
+  // A change outside every extracted function, such as an import or a constant.
   const structural =
-    outsideSymbols(file.changes.before, file.symbolsBefore) || outsideSymbols(file.changes.after, file.symbolsAfter);
+    textOutsideSymbols(file.before, file.symbolsBefore) !== textOutsideSymbols(file.after, file.symbolsAfter);
   const unrepresented = changedSymbols.filter((symbol) => !symbol.represented);
   return {
     path: file.path,

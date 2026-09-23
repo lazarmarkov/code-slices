@@ -280,7 +280,7 @@ function renderRemainder() {
         return `<li><code>${escapeHtml(name)}</code> <span class="muted">${status}, no pseudocode card</span></li>`;
       })
       .join('');
-    details.innerHTML = `<summary><span class="file-name">${escapeHtml(file.path)}</span></summary>${file.note ? `<p>${escapeHtml(file.note)}</p>` : ''}${entries ? `<ul class="inventory">${entries}</ul>` : ''}${file.structural ? '<p class="muted">This file also has changed lines outside extracted functions.</p>' : ''}<div class="raw-diff"></div>`;
+    details.innerHTML = `<summary><span class="file-name">${escapeHtml(file.path)}</span></summary>${file.note ? `<p>${escapeHtml(file.note)}</p>` : ''}${entries ? `<ul class="inventory">${entries}</ul>` : ''}${file.structural ? '<p class="muted">This file also has changes outside extracted functions.</p>' : ''}<div class="raw-diff"></div>`;
     let rendered = false;
     details.addEventListener('toggle', () => {
       if (!details.open || rendered) return;

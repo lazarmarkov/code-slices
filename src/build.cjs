@@ -16,7 +16,11 @@ if (args.length !== 2) {
 
 const { manifest, readSource, loadEntries } = loadManifest(args[0]);
 const parse = (file, text) => ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
-const symbolsOf = (revision, file) => sourceSymbols(file, readSource(revision, file));
+// Unlike PR mode, a card without a truthy className matches a function under any owner.
+const cardSource = (revision, card) => {
+  const symbols = sourceSymbols(card.file, readSource(revision, card.file));
+  return findSymbol(symbols, card.className ? card : { symbol: card.symbol }, revision);
+};
 
 // Function-relative lines that hold nothing but a complete Logger.log(...) statement.
 function loggerLines(revision, file, source) {
@@ -99,8 +103,8 @@ for (const flow of flows) {
     claimId('card', card.id);
     if (isExcludedPath(card.file)) throw new Error(`Excluded test/eval/helper file: ${card.file}`);
     card.flowId = flow.id;
-    card.sourceAfter = findSymbol(symbolsOf('head', card.file), card, 'head');
-    card.sourceBefore = findSymbol(symbolsOf('base', card.file), card, 'base');
+    card.sourceAfter = cardSource('head', card);
+    card.sourceBefore = cardSource('base', card);
     if (!card.sourceAfter) throw new Error(`Missing head function ${card.symbol}`);
     validateCard(card);
     card.status = !card.sourceBefore

@@ -34,6 +34,6 @@ Inspect the built report as well as the JSON:
 ## Coverage and privacy
 
 - Changed functions without cards are named under Remaining source changes, and their exact file diff opens there.
-- A changed line outside every extracted function also lists its file there.
+- A change outside every extracted function, even on a line it shares with one, also lists its file there.
 - Test, eval, fixture and test-helper paths do not appear in cards, diffs, indexes or evidence.
 - The output remains at the requested private location when its source is private.

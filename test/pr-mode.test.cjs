@@ -157,27 +157,21 @@ test('report excludes helper files and their source', () => {
   assert.doesNotMatch(html, /helperSecret|before-private|after-private/);
 });
 
-test('report lists functions declared together in one statement', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'code-slices-multi-declarator-'));
-  fs.mkdirSync(path.join(root, 'base'));
-  fs.mkdirSync(path.join(root, 'head'));
-  fs.writeFileSync(
-    path.join(root, 'base', 'events.ts'),
-    'export const onOpen = () => {}, onClose = () => {};\nconst handler = () => x, count = 0;\n',
-  );
-  fs.writeFileSync(
-    path.join(root, 'head', 'events.ts'),
-    'export const onOpen = () => {}, onClose = () => 1;\nconst handler = () => y, count = 0;\n',
-  );
+function buildFixture(files, manifest) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'code-slices-pr-fixture-'));
+  for (const [file, contents] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), contents);
+  }
   fs.writeFileSync(
     path.join(root, 'manifest.json'),
     JSON.stringify({
-      title: 'Multi-declarator',
+      title: 'Fixture',
       baseRef: 'before',
       headRef: 'after',
       sources: { base: 'base', head: 'head' },
-      files: ['events.ts'],
       cards: [],
+      ...manifest,
     }),
   );
   const output = path.join(root, 'report.html');
@@ -185,9 +179,48 @@ test('report lists functions declared together in one statement', () => {
     cwd: path.resolve(__dirname, '..'),
   });
   const html = fs.readFileSync(output, 'utf8');
-  const data = JSON.parse(html.match(/<script type="application\/json" id="review-data">(.*?)<\/script>/s)[1]);
+  return JSON.parse(html.match(/<script type="application\/json" id="review-data">(.*?)<\/script>/s)[1]);
+}
+
+test('report lists functions declared together in one statement', () => {
+  const data = buildFixture(
+    {
+      'base/events.ts': 'export const onOpen = () => {}, onClose = () => {};\nconst handler = () => x, count = 0;\n',
+      'head/events.ts': 'export const onOpen = () => {}, onClose = () => 1;\nconst handler = () => y, count = 0;\n',
+    },
+    { files: ['events.ts'] },
+  );
   assert.deepEqual(
     data.files[0].unrepresented.map(({ symbol }) => symbol),
     ['onClose', 'handler'],
+  );
+  assert.equal(data.files[0].structural, false);
+});
+
+test('a change beside a function on the same line is a remaining source change', () => {
+  const data = buildFixture(
+    {
+      'base/events.ts': 'export const onOpen = () => {}, VERSION = 1;\n',
+      'head/events.ts': 'export const onOpen = () => {}, VERSION = 2;\n',
+    },
+    { files: ['events.ts'] },
+  );
+  assert.deepEqual(data.files[0].changedSymbols, []);
+  assert.equal(data.files[0].structural, true);
+  assert.equal(data.files[0].showRemainder, true);
+});
+
+test('changes inside functions, or whole added functions, are not structural', () => {
+  const data = buildFixture(
+    {
+      'base/worker.ts': 'const alpha = { run() { return 1; } };\n',
+      'head/worker.ts': 'const alpha = { run() { return 2; } };\nexport function added() {\n  return 3;\n}\n',
+      'head/new.ts': 'export function created() {}\n',
+    },
+    { files: ['worker.ts', 'new.ts'] },
+  );
+  assert.deepEqual(
+    data.files.map((file) => file.structural),
+    [false, false],
   );
 });

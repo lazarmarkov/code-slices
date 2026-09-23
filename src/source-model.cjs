@@ -3,7 +3,8 @@ const ts = require('typescript');
 const isTypeScriptFile = (file) => /\.(?:[cm]?ts|tsx)$/.test(file);
 
 // Lists every function with a body: declarations, class and object methods, constructors and
-// function-valued variables. Lines are one-based; behaviorStart is relative to the function.
+// function-valued variables. Lines are one-based; behaviorStart is relative to the function;
+// span holds the character offsets of the function's text.
 function sourceSymbols(file, text) {
   if (text === null || !isTypeScriptFile(file)) return [];
   const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
@@ -29,6 +30,7 @@ function sourceSymbols(file, text) {
       className,
       line: start,
       end: lineOf(node.end),
+      span: [node.getStart(sourceFile), node.end],
       behaviorStart: lineOf(behavior.getStart(sourceFile)) - start + 1,
       code: node.getText(sourceFile),
     });
