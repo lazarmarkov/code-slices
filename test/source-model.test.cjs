@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { escapeHtml } = require('../src/escape-html.cjs');
-const { isExcludedPath } = require('../src/excluded-paths.cjs');
+const { isExcludedPrPath, isTestPath } = require('../src/excluded-paths.cjs');
 const { changedLineSets, isValidRange, sourceSymbols, symbolsByKey } = require('../src/source-model.cjs');
 
 test('changedLineSets lists deleted and added lines on each side', () => {
@@ -64,7 +64,7 @@ test('symbolsByKey rejects two functions with the same owner and name', () => {
   );
 });
 
-test('isExcludedPath covers tests, evals, fixtures and helpers', () => {
+test('isTestPath covers tests, evals and fixtures; isExcludedPrPath adds helper directories', () => {
   for (const file of [
     'test/a.ts',
     'src/__tests__/a.ts',
@@ -73,14 +73,17 @@ test('isExcludedPath covers tests, evals, fixtures and helpers', () => {
     'src/a.spec.ts',
     'src/a.eval.ts',
     'fixtures/a.ts',
-    'src/helpers/a.ts',
-    'src/test-helpers/a.ts',
     'src/testHelpers.ts',
   ]) {
-    assert.equal(isExcludedPath(file), true, file);
+    assert.equal(isTestPath(file), true, file);
+    assert.equal(isExcludedPrPath(file), true, file);
+  }
+  for (const file of ['src/helpers/a.ts', 'src/test-helpers/a.ts']) {
+    assert.equal(isTestPath(file), false, file);
+    assert.equal(isExcludedPrPath(file), true, file);
   }
   for (const file of ['src/service.ts', 'src/testing.ts', 'src/helper.ts', 'src/latest/a.ts']) {
-    assert.equal(isExcludedPath(file), false, file);
+    assert.equal(isExcludedPrPath(file), false, file);
   }
 });
 

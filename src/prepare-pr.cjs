@@ -6,7 +6,7 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 const { changedLineSets, sourceSymbols, symbolsByKey } = require('./source-model.cjs');
 const { AUTHORING_RULES, referencedContracts } = require('./pr-generation-contract.cjs');
-const { isExcludedPath } = require('./excluded-paths.cjs');
+const { isExcludedPrPath } = require('./excluded-paths.cjs');
 
 const USAGE =
   'Usage: node src/prepare-pr.cjs --repo <repository> --base <base-ref> --head <head-ref> --output <empty-directory> [--title <report title>]';
@@ -54,7 +54,7 @@ function parseChangedFiles(repo, base, head) {
   for (let index = 0; index < fields.length - 1; index += 2) {
     const status = fields[index][0];
     const file = fields[index + 1];
-    if (!file || isExcludedPath(file)) continue;
+    if (!file || isExcludedPrPath(file)) continue;
     files.push({ file, status: status === 'A' ? 'Added' : status === 'D' ? 'Removed' : 'Modified' });
   }
   return files.sort((left, right) => left.file.localeCompare(right.file));
