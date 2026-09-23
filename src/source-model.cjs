@@ -132,14 +132,14 @@ function changedLineSets(before, after) {
   return changes;
 }
 
-// A mapping range is [first, last]: one-based, inclusive and within `lineCount` lines.
-const isValidRange = (range, lineCount) =>
+// A mapping range is [first, last]: one-based, inclusive and no later than `lastLine`.
+const isValidRange = (range, lastLine) =>
   Array.isArray(range) &&
   range.length === 2 &&
   range.every(Number.isInteger) &&
   range[0] >= 1 &&
   range[0] <= range[1] &&
-  range[1] <= lineCount;
+  range[1] <= lastLine;
 
 const lineCount = (text) => text.split('\n').length;
 
