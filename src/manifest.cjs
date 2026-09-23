@@ -29,7 +29,7 @@ function loadManifest(manifestFile) {
     });
   }
 
-  return { manifest, sourcePath, readSource, loadEntries };
+  return { manifest, readSource, loadEntries };
 }
 
 function writeReport(outputFile, html) {

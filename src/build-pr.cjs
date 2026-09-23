@@ -26,16 +26,22 @@ if (args.length !== 2) {
 
 const { manifest, readSource, loadEntries } = loadManifest(args[0]);
 
-// The file text with every extracted function cut out. A line that held only function text is
+// The file text with every extracted function cut out, along with the comma that separates it
+// from a neighboring object member or declarator. A line that held only function text is
 // dropped, so adding or removing a whole function leaves the rest unchanged.
 function textOutsideSymbols(text, symbols) {
   const source = text ?? '';
   const cut = '\u0000';
   let kept = '';
   let cursor = 0;
-  for (const [start, end] of symbols.map((symbol) => symbol.span).sort((left, right) => left[0] - right[0])) {
+  for (let [start, end] of symbols.map((symbol) => symbol.span).sort((left, right) => left[0] - right[0])) {
     if (end <= cursor) continue;
-    kept += `${source.slice(cursor, Math.max(cursor, start))}${cut}`;
+    start = Math.max(cursor, start);
+    const following = source.slice(end).match(/^\s*,[^\S\n]*/);
+    const preceding = source.slice(cursor, start).match(/,\s*$/);
+    if (following) end += following[0].length;
+    else if (preceding) start -= preceding[0].length;
+    kept += `${source.slice(cursor, start)}${cut}`;
     cursor = end;
   }
   kept += source.slice(cursor);
