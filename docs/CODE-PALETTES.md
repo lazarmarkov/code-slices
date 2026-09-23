@@ -1,7 +1,14 @@
 # Code palettes
 
-Pseudocode and TypeScript use the same semantic color roles: keyword, call, type, literal, variable, punctuation, and comment. A selected palette must assign every role and apply the same value to both panes.
+Pseudocode and TypeScript share seven color roles: keyword, call, type, literal, variable, punctuation and comment. A palette assigns a color to every role, and both panes use the same colors.
 
-Reusable palette definitions live in `src/code-palettes.cjs`. Palette previews tokenize TypeScript with the TypeScript compiler scanner and use lightweight contextual classification for identifiers. This is lexical highlighting; it does not perform type checking.
+The palettes are defined in `src/code-palettes.cjs`. PR-change reports use Quiet ink. They register it as a Pierre theme for the source diff, so Pierre still draws its own line and word-level diff highlighting. Execution-slice reports use Pierre's GitHub light theme.
 
-Quiet ink is the main PR report default. The renderer registers a Pierre theme from the same palette values used by pseudocode, so Pierre retains ownership of line and intra-line diff markup. Building the comparison preview does not change this default.
+To compare the palettes on one card of a PR-change manifest, build the preview page:
+
+```sh
+pnpm example:palettes
+# or: node src/build-palette-preview.cjs <manifest.json> <card-id-or-symbol> <output.html>
+```
+
+The preview colors TypeScript with the TypeScript compiler's scanner and a few rules for identifiers, such as a name followed by `(` being a call. It is lexical highlighting only; it does not type-check. Building the preview does not change the default palette.

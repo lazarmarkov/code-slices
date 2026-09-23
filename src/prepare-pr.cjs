@@ -1,21 +1,34 @@
 #!/usr/bin/env node
+// Prepares a PR for pseudocode authoring: copies the changed source blobs of two Git revisions,
+// extracts the changed functions and writes the packets, a card skeleton and a manifest.
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
-const { lineOperations, sourceSymbols } = require('./source-model.cjs');
+const { changedLineSets, sourceSymbols, symbolsByKey } = require('./source-model.cjs');
 const { AUTHORING_RULES, referencedContracts } = require('./pr-generation-contract.cjs');
-const { isExcludedReviewPath } = require('./pr-paths.cjs');
+const { isExcludedPrPath } = require('./excluded-paths.cjs');
+
+const USAGE =
+  'Usage: node src/prepare-pr.cjs --repo <repository> --base <base-ref> --head <head-ref> --output <empty-directory> [--title <report title>]';
+
+const OPTIONS = ['repo', 'base', 'head', 'output', 'title'];
+
+function usageError(message) {
+  process.stderr.write(`${message}\n${USAGE}\n`);
+  process.exit(1);
+}
 
 function parseArguments(argv) {
   const values = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index];
     const value = argv[index + 1];
-    if (!name?.startsWith('--') || value === undefined) throw new Error('Arguments must be --name value pairs');
+    if (!name?.startsWith('--') || value === undefined) usageError('Arguments must be --name value pairs.');
+    if (!OPTIONS.includes(name.slice(2))) usageError(`Unknown option: ${name}`);
     values[name.slice(2)] = value;
   }
   for (const name of ['repo', 'base', 'head', 'output']) {
-    if (!values[name]) throw new Error(`Missing --${name}`);
+    if (!values[name]) usageError(`Missing --${name}.`);
   }
   return values;
 }
@@ -41,24 +54,10 @@ function parseChangedFiles(repo, base, head) {
   for (let index = 0; index < fields.length - 1; index += 2) {
     const status = fields[index][0];
     const file = fields[index + 1];
-    if (!file || isExcludedReviewPath(file)) continue;
+    if (!file || isExcludedPrPath(file)) continue;
     files.push({ file, status: status === 'A' ? 'Added' : status === 'D' ? 'Removed' : 'Modified' });
   }
   return files.sort((left, right) => left.file.localeCompare(right.file));
-}
-
-function symbolKey(symbol) {
-  return `${symbol.className || ''}\u0000${symbol.symbol}`;
-}
-
-function symbolMap(file, text, revision) {
-  const output = new Map();
-  for (const symbol of sourceSymbols(file, text)) {
-    const key = symbolKey(symbol);
-    if (output.has(key)) throw new Error(`Duplicate ${revision} symbol in ${file}: ${symbol.symbol}`);
-    output.set(key, symbol);
-  }
-  return output;
 }
 
 function slug(value) {
@@ -81,15 +80,7 @@ function uniqueId(file, symbol, used) {
   return id;
 }
 
-function changedRelativeLines(before, after) {
-  const result = { before: new Set(), after: new Set() };
-  for (const operation of lineOperations(before?.code ?? null, after?.code ?? null)) {
-    if (operation.type === 'delete') result.before.add(operation.oldLine);
-    if (operation.type === 'add') result.after.add(operation.newLine);
-  }
-  return result;
-}
-
+// Numbers each source line and puts `marker` in front of the changed ones.
 function numbered(code, changed, marker) {
   if (code === null) return '<absent>';
   const lines = code.split('\n');
@@ -129,7 +120,9 @@ const options = parseArguments(process.argv.slice(2));
 const repo = path.resolve(options.repo);
 const output = path.resolve(options.output);
 if (!fs.statSync(repo).isDirectory()) throw new Error(`Repository is not a directory: ${repo}`);
-if (fs.existsSync(output) && fs.readdirSync(output).length) throw new Error(`Output directory must be empty: ${output}`);
+if (fs.existsSync(output) && fs.readdirSync(output).length) {
+  throw new Error(`Output directory must be empty: ${output}`);
+}
 fs.mkdirSync(output, { recursive: true });
 
 const base = git(repo, ['rev-parse', `${options.base}^{commit}`]).trim();
@@ -154,15 +147,15 @@ for (const changedFile of changedFiles) {
   }
   const beforeText = beforeBuffer?.toString('utf8') ?? null;
   const afterText = afterBuffer?.toString('utf8') ?? null;
-  const beforeSymbols = symbolMap(changedFile.file, beforeText, 'base');
-  const afterSymbols = symbolMap(changedFile.file, afterText, 'head');
+  const beforeSymbols = symbolsByKey(changedFile.file, sourceSymbols(changedFile.file, beforeText), 'base');
+  const afterSymbols = symbolsByKey(changedFile.file, sourceSymbols(changedFile.file, afterText), 'head');
   const entries = [];
   for (const key of [...new Set([...beforeSymbols.keys(), ...afterSymbols.keys()])].sort()) {
     const sourceBefore = beforeSymbols.get(key) || null;
     const sourceAfter = afterSymbols.get(key) || null;
     if (sourceBefore?.code === sourceAfter?.code) continue;
     const source = sourceAfter || sourceBefore;
-    const changes = changedRelativeLines(sourceBefore, sourceAfter);
+    const changes = changedLineSets(sourceBefore?.code ?? null, sourceAfter?.code ?? null);
     const card = {
       id: uniqueId(changedFile.file, source, usedIds),
       file: changedFile.file,

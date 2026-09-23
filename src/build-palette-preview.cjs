@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-const fs = require('node:fs');
-const path = require('node:path');
+// Builds a page that shows one PR card's pseudocode and source in each code palette.
+const { escapeHtml } = require('./escape-html.cjs');
+const { loadManifest, writeReport } = require('./manifest.cjs');
 const { palettes, paletteCss, roles } = require('./code-palettes.cjs');
 const { highlightPseudocode } = require('./pseudocode-highlight.cjs');
 const { findSymbol, sourceSymbols } = require('./source-model.cjs');
@@ -12,28 +13,15 @@ if (args.length !== 3) {
   process.exit(1);
 }
 
-const escapeHtml = (value) =>
-  String(value).replace(/[&<>"']/g, (character) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character],
-  );
-
 const [manifestInput, target, outputInput] = args;
-const manifestPath = path.resolve(manifestInput);
-const manifestDirectory = path.dirname(manifestPath);
-const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-const cards = manifest.cards.flatMap((entry) => {
-  const input = JSON.parse(fs.readFileSync(path.resolve(manifestDirectory, entry), 'utf8'));
-  return input.cards || [input];
-});
-const matches = cards.filter((card) => card.symbol === target || card.id === target);
+const { manifest, readSource, loadEntries } = loadManifest(manifestInput);
+const matches = loadEntries(manifest.cards, 'cards').filter((card) => card.symbol === target || card.id === target);
 if (matches.length !== 1) throw new Error(`Expected one card for ${target}; found ${matches.length}`);
 const card = matches[0];
 if (!card.after) throw new Error(`Card ${card.id} has no after pseudocode`);
 
-const sourcePath = path.resolve(manifestDirectory, manifest.sources.head, card.file);
-const sourceText = fs.readFileSync(sourcePath, 'utf8');
-const source = findSymbol(sourceSymbols(card.file, sourceText), card, 'head');
-if (!source) throw new Error(`Could not extract ${card.symbol} from ${sourcePath}`);
+const source = findSymbol(sourceSymbols(card.file, readSource('head', card.file)), card, 'head');
+if (!source) throw new Error(`Could not extract ${card.symbol} from the head revision of ${card.file}`);
 
 const pseudoLines = highlightPseudocode(card.after);
 const sourceLines = highlightTypeScript(source.code);
@@ -44,8 +32,7 @@ const rows = (lines) =>
         `<div class="code-line"><span class="line-number">${index + 1}</span><code>${line || ' '}</code></div>`,
     )
     .join('');
-const swatches = () =>
-  roles.map((role) => `<span><i style="background:var(--${role})"></i>${role}</span>`).join('');
+const swatches = () => roles.map((role) => `<span><i style="background:var(--${role})"></i>${role}</span>`).join('');
 const paletteRules = palettes.map(paletteCss).join('');
 const paletteData = Object.fromEntries(palettes.map((palette) => [palette.id, palette]));
 
@@ -60,7 +47,7 @@ const html = `<!doctype html>
 </style>
 </head>
 <body>
-<header><h1>Softer code palette comparison</h1><p>The pseudocode and exact TypeScript use the same token colors in each option.</p><div class="breadcrumb">${escapeHtml(card.file)} · ${escapeHtml(card.symbol)}</div></header>
+<header><h1>Code palette comparison</h1><p>Each palette colors the pseudocode and the exact TypeScript with the same token colors.</p><div class="breadcrumb">${escapeHtml(card.file)} · ${escapeHtml(card.symbol)}</div></header>
 <main>
 <section class="review palette-${palettes[0].id}" id="review">
   <div class="toolbar"><div class="tabs">${palettes.map((palette, index) => `<button data-palette="${palette.id}" aria-pressed="${index === 0}">${palette.name}</button>`).join('')}</div><span class="palette-note" id="palette-note">${palettes[0].description}</span></div>
@@ -84,9 +71,7 @@ document.querySelectorAll('[data-palette]').forEach(button=>button.addEventListe
 </body>
 </html>`;
 
-const output = path.resolve(outputInput);
-fs.mkdirSync(path.dirname(output), { recursive: true });
-fs.writeFileSync(output, html);
+const output = writeReport(outputInput, html);
 process.stdout.write(
   `${JSON.stringify({ output, symbol: card.symbol, pseudocodeLines: pseudoLines.length, sourceLines: sourceLines.length, palettes: palettes.length })}\n`,
 );

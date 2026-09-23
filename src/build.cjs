@@ -1,22 +1,218 @@
 #!/usr/bin/env node
-const fs=require('node:fs');
-const path=require('node:path');
-const ts=require('typescript');
-const args=process.argv.slice(2);
-if(args.length!==2){process.stderr.write('Usage: node src/build.cjs <manifest.json> <output.html>\n');process.exit(1);}
-const manifestPath=path.resolve(args[0]),dir=path.dirname(manifestPath),manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
-const excluded=p=>/(^|\/)(tests?|__tests__|evals?|__fixtures__|fixtures)(\/|$)|\.(test|spec|eval)\.|testHelpers/i.test(p);
-const read=(revision,file)=>{const root=path.resolve(dir,manifest.sources[revision]);const target=path.resolve(root,file);if(!target.startsWith(root+path.sep))throw Error('Source path escapes snapshot: '+file);return fs.existsSync(target)?fs.readFileSync(target,'utf8'):null;};
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function symbols(revision,file){const text=read(revision,file);if(text===null||!file.endsWith('.ts'))return[];const sf=ts.createSourceFile(file,text,ts.ScriptTarget.Latest,true),out=[];function visit(node){if((ts.isFunctionDeclaration(node)||ts.isMethodDeclaration(node))&&node.name&&node.body)out.push({symbol:node.name.getText(sf),className:ts.isClassDeclaration(node.parent)?node.parent.name?.getText(sf):null,line:sf.getLineAndCharacterOfPosition(node.getStart(sf)).line+1,end:sf.getLineAndCharacterOfPosition(node.end).line+1,code:node.getText(sf)});else if(ts.isVariableDeclaration(node)&&node.initializer&&(ts.isArrowFunction(node.initializer)||ts.isFunctionExpression(node.initializer)))out.push({symbol:node.name.getText(sf),line:sf.getLineAndCharacterOfPosition(node.getStart(sf)).line+1,end:sf.getLineAndCharacterOfPosition(node.end).line+1,code:node.getText(sf)});ts.forEachChild(node,visit)}visit(sf);return out;}
-function extract(revision,card){const matches=symbols(revision,card.file).filter(s=>s.symbol===card.symbol&&(!card.className||s.className===card.className));if(matches.length>1)throw Error('Ambiguous symbol; supply className: '+card.symbol);return matches[0]||null;}
-function visibility(source,mappings,file,revision){if(!source)return null;const represented=new Set();for(const m of mappings)if(m.source)for(let line=m.source[0];line<=m.source[1];line++)represented.add(line);const sf=ts.createSourceFile(file,read(revision,file),ts.ScriptTarget.Latest,true),ignored=new Set(),fileLines=sf.text.split('\n');function visit(node){if(ts.isExpressionStatement(node)&&ts.isCallExpression(node.expression)&&node.expression.expression.getText(sf)==='Logger.log'){const start=sf.getLineAndCharacterOfPosition(node.getStart(sf)),end=sf.getLineAndCharacterOfPosition(node.end);for(let line=start.line;line<=end.line;line++){const before=line===start.line?fileLines[line].slice(0,start.character):'';const after=line===end.line?fileLines[line].slice(end.character):'';if(!before.trim()&&!after.trim())ignored.add(line+2-source.line);}}ts.forEachChild(node,visit)}visit(sf);const eligible=source.code.split('\n').map((text,i)=>({text,line:i+1})).filter(row=>row.text.trim()&&!ignored.has(row.line));const hidden=eligible.filter(row=>!represented.has(row.line)).length;return {hidden,total:eligible.length,percent:eligible.length?Math.round(hidden/eligible.length*100):0,show:eligible.length>0&&hidden/eligible.length>.3};}
-const flows=manifest.flows.map(item=>typeof item==='string'?JSON.parse(fs.readFileSync(path.resolve(dir,item),'utf8')):item).flatMap(item=>item.flows||[item]);
-const cards=flows.flatMap(f=>f.cards),ids=new Set();
-for(const flow of flows){if(!/^[\w-]+$/.test(flow.id)||ids.has(flow.id))throw Error('Invalid/duplicate flow id '+flow.id);ids.add(flow.id);for(const c of flow.cards){if(!/^[\w-]+$/.test(c.id)||ids.has(c.id))throw Error('Invalid/duplicate card id '+c.id);ids.add(c.id);if(excluded(c.file))throw Error('Excluded test/eval file: '+c.file);c.flowId=flow.id;c.sourceAfter=extract('head',c);c.sourceBefore=extract('base',c);if(!c.sourceAfter)throw Error('Missing head function '+c.symbol);for(const [revision,code,mappings,source] of [['after',c.after,c.mappingsAfter,c.sourceAfter],['before',c.before,c.mappingsBefore,c.sourceBefore]]){if(code==null)continue;if(!source)throw Error('Pseudocode has no original source: '+c.id+' '+revision);if(!Array.isArray(mappings))throw Error('Missing mappings for '+c.id+' '+revision);for(const m of mappings){for(const [r,max] of [[m.pseudo,code.split('\n').length],[m.source,source.code.split('\n').length]])if(!Array.isArray(r)||r.length!==2||!r.every(Number.isInteger)||r[0]<1||r[1]<r[0]||r[1]>max)throw Error('Invalid mapping '+c.id+' '+revision);}}c.status=!c.sourceBefore?'Added':c.sourceBefore.code===c.sourceAfter.code?'Context':'Modified';c.visibilityAfter=visibility(c.sourceAfter,c.mappingsAfter||[],c.file,'head');c.visibilityBefore=visibility(c.sourceBefore,c.mappingsBefore||[],c.file,'base');}}
-const files=manifest.files.filter(f=>!excluded(typeof f==='string'?f:f.path)).map(input=>{const f=typeof input==='string'?{path:input}:input,before=read('base',f.path),after=read('head',f.path);if(before===null&&after===null)throw Error('Missing file '+f.path);const old=symbols('base',f.path),next=symbols('head',f.path);const changed=next.filter(s=>!old.some(o=>o.symbol===s.symbol&&o.className===s.className&&o.code===s.code)).map(s=>{const c=cards.find(c=>c.file===f.path&&c.symbol===s.symbol&&(!c.className||s.className===c.className));return {...s,code:undefined,card:c?.id||null,flow:c?.flowId||null};});for(const s of old)if(!next.some(n=>n.symbol===s.symbol&&n.className===s.className))changed.push({...s,code:undefined,card:null,flow:null,removed:true});const covered=[...new Set(cards.filter(c=>c.file===f.path).map(c=>c.flowId))];return {...f,before,after,changed,flows:covered,category:covered.length?'Slice + remaining changes':changed.length?'Not covered by a slice':'Structural/support review'};});
-const types={base:{},head:{}};for(const revision of ['base','head'])for(const f of files){const text=read(revision,f.path);if(!text||!f.path.endsWith('.ts'))continue;const sf=ts.createSourceFile(f.path,text,ts.ScriptTarget.Latest,true);for(const n of sf.statements)if((ts.isTypeAliasDeclaration(n)||ts.isInterfaceDeclaration(n)||ts.isEnumDeclaration(n))&&n.name)types[revision][n.name.text]={file:f.path,code:n.getText(sf)};}
-const data={title:manifest.title,url:manifest.url||'',repositoryURL:manifest.repositoryURL||'',base:manifest.baseRef,head:manifest.headRef,flows,files,types};
-const css=fs.readFileSync(path.join(__dirname,'style.css'),'utf8'),runtime=fs.readFileSync(path.join(__dirname,'runtime.js'),'utf8');
-const html=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(manifest.title)}</title><style>${css}</style></head><body><header><div class="muted">CODE SLICES / EXECUTION SLICE</div><h1>${esc(manifest.title)}</h1><p>${esc(manifest.description||'Explore selected paths through changed code.')}</p><p class="muted">${esc(manifest.baseRef)} → ${esc(manifest.headRef)} · ${files.length} implementation files</p></header><div class="layout"><aside><a href="#coverage">Changed-code index</a>${flows.map((f,i)=>`<a href="#${f.id}">${String(i+1).padStart(2,'0')} ${esc(f.title)}</a>`).join('')}<a href="#structural">Supporting changes</a><a href="#guide">Reading guide</a></aside><main><div class="toolbar"><div>Revision <button data-revision="after">After</button><button data-revision="before">Before</button><button data-revision="changes">Changes</button></div><div>View <button data-mode="pseudo">Pseudocode</button><button data-mode="split">Split</button></div><span class="muted">Hold Alt for types</span></div><section class="panel" id="coverage"><h2>Changed-code index</h2><p class="muted">Slices explain selected behavior. Changed functions outside those slices are listed explicitly. Open a file for its exact source diff.</p><div id="coverage-content"></div></section><div id="flows"></div><section class="panel" id="structural"><h2>Supporting changes</h2><div id="structural-content"></div></section><section class="panel" id="guide"><h2>Reading guide</h2><p><code>▹</code> describes the selected execution. Added APIs have no Before implementation. Changes compares complete pseudocode functions; Split also shows the source diff. Hover pairing works in Before and After.</p><p>A yellow gauge appears above 30% unmapped nonblank source lines, excluding Logger.log statements. This estimates representation, not execution coverage. Hold Alt to inspect types. The report represents authored source analysis, not an executed trace.</p></section></main></div><script type="application/json" id="review-data">${JSON.stringify(data).replace(/</g,'\\u003c')}</script><script type="module">${runtime}</script></body></html>`;
-const output=path.resolve(args[1]);fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,html);process.stdout.write(JSON.stringify({output,files:files.length,flows:flows.length,cards:cards.length})+'\n');
+// Builds an execution-slice report: selected paths through changed code, as pseudocode beside source.
+const fs = require('node:fs');
+const path = require('node:path');
+const ts = require('typescript');
+const { escapeHtml } = require('./escape-html.cjs');
+const { isTestPath } = require('./excluded-paths.cjs');
+const { loadManifest, writeReport } = require('./manifest.cjs');
+const { findSymbol, isTypeScriptFile, isValidRange, lineCount, sourceSymbols } = require('./source-model.cjs');
+
+const args = process.argv.slice(2);
+if (args.length !== 2) {
+  process.stderr.write('Usage: node src/build.cjs <manifest.json> <output.html>\n');
+  process.exit(1);
+}
+
+const { manifest, readSource, loadEntries } = loadManifest(args[0]);
+const parse = (file, text) => ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+// Unlike PR mode, a card without a truthy className matches a function under any owner.
+const cardSource = (revision, card) => {
+  const symbols = sourceSymbols(card.file, readSource(revision, card.file));
+  return findSymbol(symbols, card.className ? card : { symbol: card.symbol }, revision);
+};
+
+// Function-relative lines that hold nothing but a complete Logger.log(...) statement.
+function loggerLines(revision, file, source) {
+  const sourceFile = parse(file, readSource(revision, file));
+  const fileLines = sourceFile.text.split('\n');
+  const lines = new Set();
+  function visit(node) {
+    if (
+      ts.isExpressionStatement(node) &&
+      ts.isCallExpression(node.expression) &&
+      node.expression.expression.getText(sourceFile) === 'Logger.log'
+    ) {
+      const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+      const end = sourceFile.getLineAndCharacterOfPosition(node.end);
+      for (let line = start.line; line <= end.line; line += 1) {
+        const before = line === start.line ? fileLines[line].slice(0, start.character) : '';
+        const after = line === end.line ? fileLines[line].slice(end.character) : '';
+        // Zero-based file line to one-based function line.
+        if (!before.trim() && !after.trim()) lines.add(line + 1 - source.line + 1);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return lines;
+}
+
+// How much of the function no mapping covers. The report flags more than 30% hidden.
+function visibility(source, mappings, file, revision) {
+  if (!source) return null;
+  const represented = new Set();
+  for (const mapping of mappings) {
+    if (!mapping.source) continue;
+    for (let line = mapping.source[0]; line <= mapping.source[1]; line += 1) represented.add(line);
+  }
+  const ignored = loggerLines(revision, file, source);
+  const eligible = source.code
+    .split('\n')
+    .map((text, index) => ({ text, line: index + 1 }))
+    .filter((row) => row.text.trim() && !ignored.has(row.line));
+  const hidden = eligible.filter((row) => !represented.has(row.line)).length;
+  const total = eligible.length;
+  return {
+    hidden,
+    total,
+    percent: total ? Math.round((hidden / total) * 100) : 0,
+    show: total > 0 && hidden / total > 0.3,
+  };
+}
+
+function validateCard(card) {
+  for (const [revision, pseudocode, mappings, source] of [
+    ['after', card.after, card.mappingsAfter, card.sourceAfter],
+    ['before', card.before, card.mappingsBefore, card.sourceBefore],
+  ]) {
+    if (pseudocode == null) continue;
+    if (!source) throw new Error(`Pseudocode has no original source: ${card.id} ${revision}`);
+    if (!Array.isArray(mappings)) throw new Error(`Missing mappings for ${card.id} ${revision}`);
+    for (const mapping of mappings) {
+      if (
+        !isValidRange(mapping.pseudo, lineCount(pseudocode)) ||
+        !isValidRange(mapping.source, lineCount(source.code))
+      ) {
+        throw new Error(`Invalid mapping ${card.id} ${revision}`);
+      }
+    }
+  }
+}
+
+const flows = loadEntries(manifest.flows, 'flows');
+const cards = flows.flatMap((flow) => flow.cards);
+const ids = new Set();
+const claimId = (kind, id) => {
+  if (!/^[\w-]+$/.test(id) || ids.has(id)) throw new Error(`Invalid/duplicate ${kind} id ${id}`);
+  ids.add(id);
+};
+for (const flow of flows) {
+  claimId('flow', flow.id);
+  for (const card of flow.cards) {
+    claimId('card', card.id);
+    if (isTestPath(card.file)) throw new Error(`Excluded test/eval/fixture file: ${card.file}`);
+    card.flowId = flow.id;
+    card.sourceAfter = cardSource('head', card);
+    card.sourceBefore = cardSource('base', card);
+    if (!card.sourceAfter) throw new Error(`Missing head function ${card.symbol}`);
+    validateCard(card);
+    card.status = !card.sourceBefore
+      ? 'Added'
+      : card.sourceBefore.code === card.sourceAfter.code
+        ? 'Context'
+        : 'Modified';
+    card.visibilityAfter = visibility(card.sourceAfter, card.mappingsAfter || [], card.file, 'head');
+    card.visibilityBefore = visibility(card.sourceBefore, card.mappingsBefore || [], card.file, 'base');
+  }
+}
+
+const sameSymbol = (left, right) => left.symbol === right.symbol && left.className === right.className;
+const files = manifest.files
+  .map((input) => (typeof input === 'string' ? { path: input } : input))
+  .filter((file) => !isTestPath(file.path))
+  .map((file) => {
+    const before = readSource('base', file.path);
+    const after = readSource('head', file.path);
+    if (before === null && after === null) throw new Error(`Missing file ${file.path}`);
+    const oldSymbols = sourceSymbols(file.path, before);
+    const newSymbols = sourceSymbols(file.path, after);
+    const changed = newSymbols
+      .filter((symbol) => !oldSymbols.some((old) => sameSymbol(old, symbol) && old.code === symbol.code))
+      .map((symbol) => {
+        const card = cards.find(
+          (entry) =>
+            entry.file === file.path &&
+            entry.symbol === symbol.symbol &&
+            (!entry.className || entry.className === symbol.className),
+        );
+        return { symbol: symbol.symbol, className: symbol.className, card: card?.id || null };
+      });
+    for (const symbol of oldSymbols) {
+      if (!newSymbols.some((next) => sameSymbol(next, symbol))) {
+        changed.push({ symbol: symbol.symbol, className: symbol.className, card: null, removed: true });
+      }
+    }
+    const covered = [...new Set(cards.filter((card) => card.file === file.path).map((card) => card.flowId))];
+    const category = covered.length
+      ? 'Slice + remaining changes'
+      : changed.length
+        ? 'Not covered by a slice'
+        : 'Structural/support review';
+    return { ...file, before, after, changed, flows: covered, category };
+  });
+
+// Top-level type, interface and enum declarations, shown while Alt is held.
+const types = { base: {}, head: {} };
+for (const revision of ['base', 'head']) {
+  for (const file of files) {
+    const text = readSource(revision, file.path);
+    if (!text || !isTypeScriptFile(file.path)) continue;
+    const sourceFile = parse(file.path, text);
+    for (const node of sourceFile.statements) {
+      if (
+        (ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isEnumDeclaration(node)) &&
+        node.name
+      ) {
+        types[revision][node.name.text] = { file: file.path, code: node.getText(sourceFile) };
+      }
+    }
+  }
+}
+
+const data = {
+  title: manifest.title,
+  url: manifest.url || '',
+  repositoryURL: manifest.repositoryURL || '',
+  base: manifest.baseRef,
+  head: manifest.headRef,
+  flows,
+  files,
+  types,
+};
+const readAsset = (name) => fs.readFileSync(path.join(__dirname, name), 'utf8');
+const html = [
+  '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
+  `<title>${escapeHtml(manifest.title)}</title>`,
+  `<style>${readAsset('style.css')}</style>`,
+  '</head><body>',
+  '<header><div class="muted">CODE SLICES / EXECUTION SLICE</div>',
+  `<h1>${escapeHtml(manifest.title)}</h1>`,
+  `<p>${escapeHtml(manifest.description || 'Explore selected paths through changed code.')}</p>`,
+  `<p class="muted">${escapeHtml(manifest.baseRef)} → ${escapeHtml(manifest.headRef)} · ${files.length} implementation ${files.length === 1 ? 'file' : 'files'}</p>`,
+  '</header>',
+  '<div class="layout"><aside><a href="#coverage">Changed-code index</a>',
+  ...flows.map(
+    (flow, index) => `<a href="#${flow.id}">${String(index + 1).padStart(2, '0')} ${escapeHtml(flow.title)}</a>`,
+  ),
+  '<a href="#structural">Supporting changes</a><a href="#guide">Reading guide</a></aside>',
+  '<main><div class="toolbar">',
+  '<div>Revision <button data-revision="after">After</button><button data-revision="before">Before</button><button data-revision="changes">Changes</button></div>',
+  '<div>View <button data-mode="pseudo">Pseudocode</button><button data-mode="split">Split</button></div>',
+  '<span class="muted">Hold Alt for types</span></div>',
+  '<section class="panel" id="coverage"><h2>Changed-code index</h2>',
+  '<p class="muted">Slices explain selected behavior. Changed functions outside the slices are listed here too. Open a file to see its exact diff.</p>',
+  '<div id="coverage-content"></div></section>',
+  '<div id="flows"></div>',
+  '<section class="panel" id="structural"><h2>Supporting changes</h2><div id="structural-content"></div></section>',
+  '<section class="panel" id="guide"><h2>Reading guide</h2>',
+  '<p>The <code>▹</code> line describes the selected execution. A function added by the PR has no Before implementation. Changes diffs the complete pseudocode of each function; Split also shows the source diff. In After and Before, hover a line to highlight the lines it maps to on the other side.</p>',
+  '<p>A yellow dot appears when more than 30% of the nonblank source lines, not counting Logger.log statements, have no mapping. It estimates how much of the source the pseudocode represents; it is not execution coverage. Hold Alt to see type definitions. The report is an authored reading of the source, not a recorded execution.</p>',
+  '</section></main></div>',
+  `<script type="application/json" id="review-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`,
+  `<script type="module">${readAsset('runtime.js')}</script>`,
+  '</body></html>',
+].join('');
+
+const output = writeReport(args[1], html);
+process.stdout.write(`${JSON.stringify({ output, files: files.length, flows: flows.length, cards: cards.length })}\n`);

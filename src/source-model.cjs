@@ -1,7 +1,12 @@
 const ts = require('typescript');
 
+const isTypeScriptFile = (file) => /\.(?:[cm]?ts|tsx)$/.test(file);
+
+// Lists every function with a body: declarations, class and object methods, constructors and
+// function-valued variables. Lines are one-based; behaviorStart is relative to the function;
+// span holds the character offsets of the function's text.
 function sourceSymbols(file, text) {
-  if (text === null || !/\.(?:[cm]?ts|tsx)$/.test(file)) return [];
+  if (text === null || !isTypeScriptFile(file)) return [];
   const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const output = [];
 
@@ -14,19 +19,19 @@ function sourceSymbols(file, text) {
     return null;
   }
 
+  const lineOf = (position) => sourceFile.getLineAndCharacterOfPosition(position).line + 1;
+
   function add(node, symbol, className, body) {
-    const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-    const end = sourceFile.getLineAndCharacterOfPosition(node.end).line + 1;
-    let behaviorStart = sourceFile.getLineAndCharacterOfPosition(body.getStart(sourceFile)).line + 1 - start + 1;
-    if (ts.isBlock(body) && body.statements.length) {
-      behaviorStart = sourceFile.getLineAndCharacterOfPosition(body.statements[0].getStart(sourceFile)).line + 1 - start + 1;
-    }
+    const start = lineOf(node.getStart(sourceFile));
+    // The first body statement, or the expression body of an arrow function.
+    const behavior = ts.isBlock(body) && body.statements.length ? body.statements[0] : body;
     output.push({
       symbol,
       className,
       line: start,
-      end,
-      behaviorStart,
+      end: lineOf(node.end),
+      span: [node.getStart(sourceFile), node.end],
+      behaviorStart: lineOf(behavior.getStart(sourceFile)) - start + 1,
       code: node.getText(sourceFile),
     });
   }
@@ -35,11 +40,9 @@ function sourceSymbols(file, text) {
     if (ts.isFunctionDeclaration(node) && node.name && node.body) {
       add(node, node.name.getText(sourceFile), null, node.body);
     } else if (ts.isMethodDeclaration(node) && node.name && node.body) {
-      const className = ownerName(node.parent);
-      add(node, node.name.getText(sourceFile), className, node.body);
+      add(node, node.name.getText(sourceFile), ownerName(node.parent), node.body);
     } else if (ts.isConstructorDeclaration(node) && node.body) {
-      const className = ts.isClassDeclaration(node.parent) ? node.parent.name?.getText(sourceFile) || null : null;
-      add(node, 'constructor', className, node.body);
+      add(node, 'constructor', ownerName(node.parent), node.body);
     } else if (
       ts.isVariableDeclaration(node) &&
       node.initializer &&
@@ -47,10 +50,8 @@ function sourceSymbols(file, text) {
     ) {
       const declarationList = node.parent;
       const statement = declarationList.parent;
-      if (!ts.isVariableStatement(statement) || declarationList.declarations.length !== 1) {
-        throw new Error(`Unsupported multi-declaration function variable in ${file}: ${node.name.getText(sourceFile)}`);
-      }
-      add(statement, node.name.getText(sourceFile), null, node.initializer.body);
+      const span = ts.isVariableStatement(statement) && declarationList.declarations.length === 1 ? statement : node;
+      add(span, node.name.getText(sourceFile), null, node.initializer.body);
     }
     ts.forEachChild(node, visit);
   }
@@ -59,6 +60,7 @@ function sourceSymbols(file, text) {
   return output;
 }
 
+// Omitting card.className matches any owner; className: null selects a top-level function.
 function findSymbol(symbols, card, revision) {
   const hasOwner = Object.prototype.hasOwnProperty.call(card, 'className');
   const matches = symbols.filter(
@@ -70,6 +72,20 @@ function findSymbol(symbols, card, revision) {
   return matches[0] || null;
 }
 
+const symbolKey = (symbol) => `${symbol.className || ''}\u0000${symbol.symbol}`;
+
+// Maps symbolKey to symbol. Two functions with the same owner and name cannot be told apart.
+function symbolsByKey(file, symbols, revision) {
+  const output = new Map();
+  for (const symbol of symbols) {
+    const key = symbolKey(symbol);
+    if (output.has(key)) throw new Error(`Unsupported duplicate ${revision} symbol in ${file}: ${symbol.symbol}`);
+    output.set(key, symbol);
+  }
+  return output;
+}
+
+// A line-by-line diff from the longest common subsequence. Line numbers are one-based.
 function lineOperations(before, after) {
   const oldLines = before === null ? [] : before.split('\n');
   const newLines = after === null ? [] : after.split('\n');
@@ -88,11 +104,7 @@ function lineOperations(before, after) {
   let oldIndex = 0;
   let newIndex = 0;
   while (oldIndex < oldLines.length || newIndex < newLines.length) {
-    if (
-      oldIndex < oldLines.length &&
-      newIndex < newLines.length &&
-      oldLines[oldIndex] === newLines[newIndex]
-    ) {
+    if (oldIndex < oldLines.length && newIndex < newLines.length && oldLines[oldIndex] === newLines[newIndex]) {
       operations.push({ type: 'equal', oldLine: oldIndex + 1, newLine: newIndex + 1, text: oldLines[oldIndex] });
       oldIndex += 1;
       newIndex += 1;
@@ -110,4 +122,35 @@ function lineOperations(before, after) {
   return operations;
 }
 
-module.exports = { findSymbol, lineOperations, sourceSymbols };
+// The one-based lines deleted from `before` and added in `after`. Either side may be null.
+function changedLineSets(before, after) {
+  const changes = { before: new Set(), after: new Set() };
+  for (const operation of lineOperations(before, after)) {
+    if (operation.type === 'delete') changes.before.add(operation.oldLine);
+    if (operation.type === 'add') changes.after.add(operation.newLine);
+  }
+  return changes;
+}
+
+// A mapping range is [first, last]: one-based, inclusive and no later than `lastLine`.
+const isValidRange = (range, lastLine) =>
+  Array.isArray(range) &&
+  range.length === 2 &&
+  range.every(Number.isInteger) &&
+  range[0] >= 1 &&
+  range[0] <= range[1] &&
+  range[1] <= lastLine;
+
+const lineCount = (text) => text.split('\n').length;
+
+module.exports = {
+  changedLineSets,
+  findSymbol,
+  isTypeScriptFile,
+  isValidRange,
+  lineCount,
+  lineOperations,
+  sourceSymbols,
+  symbolKey,
+  symbolsByKey,
+};

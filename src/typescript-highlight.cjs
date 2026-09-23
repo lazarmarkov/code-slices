@@ -1,9 +1,5 @@
 const ts = require('typescript');
-
-const escapeHtml = (value) =>
-  String(value).replace(/[&<>"']/g, (character) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character],
-  );
+const { escapeHtml } = require('./escape-html.cjs');
 
 const commentKinds = new Set([ts.SyntaxKind.SingleLineCommentTrivia, ts.SyntaxKind.MultiLineCommentTrivia]);
 const literalKinds = new Set([

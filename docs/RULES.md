@@ -32,4 +32,4 @@ See [MODES.md](MODES.md). Execution slice is active; Function review is TODO. Bo
 
 ## Tool-wide input exclusions
 
-Ignore test and eval files completely. Exclude them before extraction or generation, including from slices, source views, diffs, changed-code indexes, coverage denominators, and report evidence. This applies to both modes, not only PR review. Test/eval directories, test/spec/eval filenames, and test-support fixtures/factories are outside the report's input set.
+Ignore test and eval files completely. Exclude them before extraction or generation, including from slices, source views, diffs, changed-code indexes, coverage denominators, and report evidence. This applies to both modes, not only PR review. Test, eval and fixture directories, `*.test.*`, `*.spec.*` and `*.eval.*` files, and `testHelpers` files are outside the report's input set. PR-change mode and PR preparation also leave out `helpers/` and `test-helpers/` directories. Both rules live in `src/excluded-paths.cjs`.
