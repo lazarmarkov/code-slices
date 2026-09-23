@@ -224,3 +224,40 @@ test('changes inside functions, or whole added functions, are not structural', (
     [false, false],
   );
 });
+
+test('adding or removing a separated object method or declarator is not structural', () => {
+  const data = buildFixture(
+    {
+      'base/api.ts': 'export const api = {\n  run() {\n    return 1;\n  },\n};\n',
+      'head/api.ts': 'export const api = {\n  run() {\n    return 1;\n  },\n  stop() {\n    return 0;\n  },\n};\n',
+      'base/inline.ts':
+        'const limits = { max: 1, check() { return true; } };\nconst first = () => 1, count = 0;\nconst size = 0, last = () => 1;\n',
+      'head/inline.ts':
+        'const limits = { max: 1 };\nconst first = () => 1, second = () => 2, count = 0;\nconst size = 0;\n',
+    },
+    {
+      files: ['api.ts', 'inline.ts'],
+      cards: [
+        {
+          id: 'api-stop',
+          file: 'api.ts',
+          symbol: 'stop',
+          before: null,
+          after: 'stop() → number\n  return 0',
+          mappingsBefore: [],
+          mappingsAfter: [
+            { pseudo: [1, 1], source: [1, 1] },
+            { pseudo: [2, 2], source: [2, 3] },
+          ],
+        },
+      ],
+    },
+  );
+  assert.deepEqual(
+    data.files.map(({ path: file, structural, showRemainder }) => ({ file, structural, showRemainder })),
+    [
+      { file: 'api.ts', structural: false, showRemainder: false },
+      { file: 'inline.ts', structural: false, showRemainder: true },
+    ],
+  );
+});
