@@ -87,17 +87,41 @@ test('Logger.log statements do not count as hidden source lines', () => {
   assert.deepEqual(card.visibilityAfter, { hidden: 0, total: 3, percent: 0, show: false });
 });
 
-test('execution-slice reports leave out helper files', () => {
+test('execution-slice reports keep helper files and their cards', () => {
   const manifest = writeFixture(
     {
-      'base/src/helpers/secret.ts': 'export function helperSecret() { return "before-private"; }\n',
-      'head/src/helpers/secret.ts': 'export function helperSecret() { return "after-private"; }\n',
+      'base/src/helpers/format.ts': 'export function format(value: string): string {\n  return value;\n}\n',
+      'head/src/helpers/format.ts': 'export function format(value: string): string {\n  return value.trim();\n}\n',
     },
-    { files: ['src/helpers/secret.ts'], flows: [] },
+    {
+      files: ['src/helpers/format.ts'],
+      flows: [
+        {
+          id: 'format',
+          title: 'Format',
+          description: '',
+          tree: 'format(value)',
+          cards: [
+            {
+              id: 'format-card',
+              file: 'src/helpers/format.ts',
+              symbol: 'format',
+              scenario: 'Any value.',
+              before: null,
+              after: 'format(value) → string\n  return value.trim()',
+              mappingsAfter: [
+                { pseudo: [1, 1], source: [1, 1] },
+                { pseudo: [2, 2], source: [2, 3] },
+              ],
+            },
+          ],
+        },
+      ],
+    },
   );
-  const { html, data } = build(manifest);
-  assert.deepEqual(data.files, []);
-  assert.doesNotMatch(html, /helperSecret|before-private|after-private/);
+  const { data } = build(manifest);
+  assert.equal(data.flows[0].cards[0].status, 'Modified');
+  assert.deepEqual(data.files[0].changed, [{ symbol: 'format', className: null, card: 'format-card' }]);
 });
 
 test('execution-slice reports list functions declared together in one statement', () => {

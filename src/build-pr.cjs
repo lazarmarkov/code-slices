@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { defaultPalette, roles } = require('./code-palettes.cjs');
 const { escapeHtml } = require('./escape-html.cjs');
-const { isExcludedPath } = require('./excluded-paths.cjs');
+const { isExcludedPrPath } = require('./excluded-paths.cjs');
 const { loadManifest, writeReport } = require('./manifest.cjs');
 const {
   changedLineSets,
@@ -27,7 +27,7 @@ if (args.length !== 2) {
 const { manifest, readSource, loadEntries } = loadManifest(args[0]);
 
 // The file text with every extracted function cut out, along with the comma that separates it
-// from a neighboring object member or declarator. A line that held only function text is
+// from the object member or declarator before it (or after it, for the first in a list). A line that held only function text is
 // dropped, so adding or removing a whole function leaves the rest unchanged.
 function textOutsideSymbols(text, symbols) {
   const source = text ?? '';
@@ -37,10 +37,10 @@ function textOutsideSymbols(text, symbols) {
   for (let [start, end] of symbols.map((symbol) => symbol.span).sort((left, right) => left[0] - right[0])) {
     if (end <= cursor) continue;
     start = Math.max(cursor, start);
-    const following = source.slice(end).match(/^\s*,[^\S\n]*/);
     const preceding = source.slice(cursor, start).match(/,\s*$/);
-    if (following) end += following[0].length;
-    else if (preceding) start -= preceding[0].length;
+    const following = source.slice(end).match(/^\s*,[^\S\n]*/);
+    if (preceding) start -= preceding[0].length;
+    else if (following) end += following[0].length;
     kept += `${source.slice(cursor, start)}${cut}`;
     cursor = end;
   }
@@ -119,7 +119,7 @@ for (const card of authoredCards) {
 
 const fileData = new Map();
 for (const input of fileInputs) {
-  if (isExcludedPath(input.path)) continue;
+  if (isExcludedPrPath(input.path)) continue;
   const before = readSource('base', input.path);
   const after = readSource('head', input.path);
   if (before === null && after === null) throw new Error(`Missing file ${input.path}`);
@@ -138,7 +138,7 @@ const cards = authoredCards.map((input) => {
     throw new Error(`Invalid or duplicate card id ${input.id}`);
   }
   ids.add(input.id);
-  if (isExcludedPath(input.file)) throw new Error(`Excluded test/eval/helper file: ${input.file}`);
+  if (isExcludedPrPath(input.file)) throw new Error(`Excluded test/eval/helper file: ${input.file}`);
   const file = fileData.get(input.file);
   if (!file) throw new Error(`Card file is unavailable: ${input.file}`);
   const sourceBefore = findSymbol(file.symbolsBefore, input, 'base');

@@ -58,7 +58,7 @@ To review a real pull request, [docs/PR-PREPARATION.md](docs/PR-PREPARATION.md) 
 - The repository does not run a model. Pseudocode and mappings are authored by a model or a person, following the generation and verification documents below.
 - The extractor finds function declarations, class and object methods, constructors and function-valued variables in `.ts`, `.tsx`, `.mts` and `.cts` files.
 - A mapping must point inside the displayed function. Mappings to other functions or files are not supported yet.
-- Tests, evals, fixtures and helpers are always left out of reports.
+- Tests, evals and fixtures are always left out of reports. PR-change reports also leave out helper directories.
 - A report embeds the source it displays. Keep it as confidential as that source.
 
 ## Documents

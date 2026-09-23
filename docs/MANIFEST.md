@@ -10,7 +10,7 @@ Required fields:
 
 - `title`, `baseRef` and `headRef`: the report title and the two revision labels, ideally commit IDs.
 - `sources`: `{ "base": "path/to/base", "head": "path/to/head" }`.
-- `files`: changed implementation file paths, or `{ "path", "note" }` objects. List supporting files as well as the files that slices cover. Test, eval, fixture and helper files are left out.
+- `files`: changed implementation file paths, or `{ "path", "note" }` objects. List supporting files as well as the files that slices cover. Test, eval and fixture files are left out.
 - `flows`: flow objects, or paths to JSON files that hold one flow or `{ "flows": [...] }`.
 
 Optional fields:

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 const { escapeHtml } = require('./escape-html.cjs');
-const { isExcludedPath } = require('./excluded-paths.cjs');
+const { isTestPath } = require('./excluded-paths.cjs');
 const { loadManifest, writeReport } = require('./manifest.cjs');
 const { findSymbol, isTypeScriptFile, isValidRange, lineCount, sourceSymbols } = require('./source-model.cjs');
 
@@ -101,7 +101,7 @@ for (const flow of flows) {
   claimId('flow', flow.id);
   for (const card of flow.cards) {
     claimId('card', card.id);
-    if (isExcludedPath(card.file)) throw new Error(`Excluded test/eval/helper file: ${card.file}`);
+    if (isTestPath(card.file)) throw new Error(`Excluded test/eval/fixture file: ${card.file}`);
     card.flowId = flow.id;
     card.sourceAfter = cardSource('head', card);
     card.sourceBefore = cardSource('base', card);
@@ -120,7 +120,7 @@ for (const flow of flows) {
 const sameSymbol = (left, right) => left.symbol === right.symbol && left.className === right.className;
 const files = manifest.files
   .map((input) => (typeof input === 'string' ? { path: input } : input))
-  .filter((file) => !isExcludedPath(file.path))
+  .filter((file) => !isTestPath(file.path))
   .map((file) => {
     const before = readSource('base', file.path);
     const after = readSource('head', file.path);
