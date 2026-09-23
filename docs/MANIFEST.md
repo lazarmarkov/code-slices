@@ -1,28 +1,41 @@
-# Manifest format
+# Execution-slice manifest
 
-The builder accepts an authored JSON manifest and writes one standalone HTML report. Paths in sources and flows are relative to the manifest. Snapshots must contain matching relative source file paths.
+`src/build.cjs` reads a JSON manifest and writes one standalone HTML report. Paths in `sources` and `flows` resolve relative to the manifest. Both snapshot directories use the same relative file paths. [examples/execution-slice](../examples/execution-slice/manifest.json) is a complete example.
 
-Required top-level fields:
+```sh
+node src/build.cjs path/to/manifest.json path/to/report.html
+```
 
-- `title`, `baseRef`, `headRef`: report labels and pinned revision IDs when available.
+Required fields:
+
+- `title`, `baseRef` and `headRef`: the report title and the two revision labels, ideally commit IDs.
 - `sources`: `{ "base": "path/to/base", "head": "path/to/head" }`.
-- `files`: changed implementation file paths, or `{ "path", "note" }` objects. Include supporting files as well as functions covered by slices. Test/eval files are excluded.
-- `flows`: flow objects, or JSON file paths containing one flow or `{ "flows": [...] }`.
+- `files`: changed implementation file paths, or `{ "path", "note" }` objects. List supporting files as well as the files that slices cover. Test, eval, fixture and helper files are left out.
+- `flows`: flow objects, or paths to JSON files that hold one flow or `{ "flows": [...] }`.
 
-Optional `description`, `url`, and `repositoryURL` add context. repositoryURL should be a GitHub repository URL for commit-pinned source links. Without it, the report remains local.
+Optional fields:
 
-Each flow has `id`, `title`, `description`, `tree`, optional `treeBefore`, and `cards`.
+- `description` appears under the title.
+- `repositoryURL`, a GitHub repository URL, makes source links point at the pinned commits. Without it, links stay inside the report.
+- `url` is kept in the report data but not shown.
+
+Each flow has `id`, `title`, `description`, `tree` (the call tree shown for After and Changes), optional `treeBefore` (shown for Before) and `cards`.
 
 Each card has:
 
-- `id`, `file`, `symbol`; optional `className` disambiguates methods.
-- `scenario`, optional `scenarioBefore`: compact path captions without a marker.
-- `change`: the PR's behavioral change.
-- `before`, `after`: authored pseudocode strings; `before: null` for new functions.
-- `mappingsBefore`, `mappingsAfter`: arrays of `{ "pseudo": [first,last], "source": [first,last] }` using one-based inclusive lines relative to each function, excluding the generated caption. Overlapping mappings are allowed and counted once for the hidden-line gauge.
+- `id`, `file` and `symbol`, plus `className` to pick a method when the name is not unique.
+- `scenario`, and optional `scenarioBefore`: the `▹` caption for the selected path, without the `▹`. See [SLICE-INSTRUCTIONS.md](SLICE-INSTRUCTIONS.md).
+- `change`: the PR's behavior change, shown under the card.
+- `before` and `after`: the pseudocode. Use `before: null` for a function the PR adds.
+- `mappingsBefore` and `mappingsAfter`: arrays of `{ "pseudo": [first, last], "source": [first, last] }`. Both ranges are one-based, inclusive and relative to the function, not counting the `▹` caption. Mappings may overlap.
 
-The source extractor supports TypeScript function declarations, class methods, and function-valued variable declarations. The renderer currently supports local function mappings. References to other functions/files remain a packaging TODO; do not invent a local mapping for them.
+The builder finds function declarations, class and object methods, constructors and function-valued variables. A mapping must point inside the displayed function; references to other functions or files are not supported yet, so do not map them to an unrelated local line.
 
-Pseudocode is LLM-authored following the language and verifier instructions. The builder does not parse or execute it, and cannot independently prove a mapping's semantic fidelity. It validates ranges and reads exact source functions from the snapshots.
+The builder checks that each mapping range fits its function and reads the exact functions from the snapshots. It does not parse the pseudocode, and it cannot check that a mapping means what it says. That is the verifier's job; see [VERIFICATION.md](VERIFICATION.md).
 
-A changed function outside the slices is shown as not covered. File-level diffs remain available. Supporting declarations are visible in exact diffs; type definitions can be revealed with Alt.
+## What the report shows
+
+- The changed-code index lists every changed function. A function without a card is marked "not covered by a slice", and each file's exact diff opens from the index.
+- Files with no changed functions appear under "Supporting changes".
+- A yellow dot on a card means more than 30% of the function's nonblank source lines have no mapping. Complete `Logger.log(...)` statements are not counted. Overlapping mappings count each source line once.
+- Holding Alt shows the type, interface and enum declarations that a flow's call tree or After pseudocode names.

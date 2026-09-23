@@ -232,8 +232,8 @@ const html = [
   '</head><body class="pr-review">',
   '<header><div class="muted">CODE SLICES / PR CHANGES</div>',
   `<h1>${escapeHtml(manifest.title)}</h1>`,
-  `<p>${escapeHtml(manifest.description || 'Review source-grounded function changes.')}</p>`,
-  `<p class="muted">${escapeHtml(manifest.baseRef)} → ${escapeHtml(manifest.headRef)} · ${cards.length} full-function translations · ${representedCount}/${changedSymbolCount} changed symbols represented</p>`,
+  `<p>${escapeHtml(manifest.description || 'Pseudocode for each changed function, beside its exact source diff.')}</p>`,
+  `<p class="muted">${escapeHtml(manifest.baseRef)} → ${escapeHtml(manifest.headRef)} · ${cards.length} ${cards.length === 1 ? 'card' : 'cards'} · ${representedCount} of ${changedSymbolCount} changed functions have a card</p>`,
   '</header>',
   '<div class="layout"><aside><a href="#changes">Changed functions</a>',
   ...cards.map(

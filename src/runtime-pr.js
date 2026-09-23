@@ -267,7 +267,7 @@ function renderRemainder() {
   const container = document.getElementById('remainder-content');
   const files = data.files.filter((file) => file.showRemainder);
   if (!files.length) {
-    container.innerHTML = '<p>Every changed function is represented, and no structural source changes remain.</p>';
+    container.innerHTML = '<p>Every changed function has a card, and no file has changes outside its functions.</p>';
     return;
   }
   container.replaceChildren();

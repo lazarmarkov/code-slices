@@ -1,45 +1,55 @@
 # PR-change mode
 
-PR-change mode is an experimental, standalone report for reviewing one source revision against another. It leads with authored full-function pseudocode and places the exact TypeScript function diff beside it. Changed source that has no pseudocode card appears in a collapsed remainder at the bottom.
-
-## Manifest
-
-Run:
+PR-change mode is an experimental report for reviewing one source revision against another. Each changed function gets a card: its full-function pseudocode diff on the left and its exact TypeScript diff on the right. Changed source that has no card is listed in a collapsed section at the bottom.
 
 ```sh
 node src/build-pr.cjs path/to/manifest.json path/to/report.html
 ```
 
-The manifest requires:
+To build the manifest and card skeleton from two Git revisions, see [PR-PREPARATION.md](PR-PREPARATION.md). [examples/pr-change](../examples/pr-change/manifest.json) is a complete example.
 
-- `title`, `baseRef` and `headRef`.
-- `sources`: `{ "base": "path/to/base", "head": "path/to/head" }`.
-- `files`: changed implementation file paths, or `{ "path", "note" }` objects.
-- `cards`: card objects or paths to JSON containing one card or `{ "cards": [...] }`.
+## Manifest
 
-Optional `description`, `url` and `repositoryURL` fields provide report context.
-Optional `cardOrder` lists card IDs that should lead the report. Unlisted cards retain their input order.
+Required fields:
+
+- `title`, `baseRef` and `headRef`: the report title and the two revision labels, ideally commit IDs.
+- `sources`: `{ "base": "path/to/base", "head": "path/to/head" }`, two directories that hold the files at each revision.
+- `files`: changed implementation file paths, or `{ "path", "note" }` objects. A file that a card names is added if missing.
+- `cards`: card objects, or paths to JSON files that hold one card or `{ "cards": [...] }`.
+
+Optional fields:
+
+- `description` appears under the title.
+- `cardOrder` lists card IDs that go first. The other cards keep their input order. Put the cards that best explain the PR first.
+- `url` and `repositoryURL` are kept in the report data but not shown.
 
 Each card has:
 
-- `id`, `file` and `symbol`.
-- Optional `className` to disambiguate class methods, object-owned methods and constructors. Use `symbol: "constructor"` for a constructor. Set `className: null` to select a top-level function when a method has the same name; omitting it allows one unambiguous match.
-- `before` and `after`: full-function pseudocode strings. Use `null` on the missing side of an added or removed function.
-- `mappingsBefore` and `mappingsAfter`: arrays of `{ "pseudo": [first, last], "source": [first, last] }`. Both ranges are one-based, inclusive and relative to the extracted function.
+- `id`, `file` and `symbol`. Use `symbol: "constructor"` for a constructor.
+- `className`, optional, to pick a class method, an object method or a constructor. `className: null` picks a top-level function when a method has the same name. Without `className`, the symbol must match exactly one function.
+- `before` and `after`: full-function pseudocode. Use `null` for the missing side of an added or removed function.
+- `mappingsBefore` and `mappingsAfter`: arrays of `{ "pseudo": [first, last], "source": [first, last] }`. Both ranges are one-based, inclusive and relative to the function.
 
-Card order is report order. Put the changes that best explain the PR first.
+The builder rejects cards for test, eval, fixture and helper files, and leaves those files out of the report.
 
-## Marker contract
+## Markers
 
-The builder asks Git for zero-context source hunks and intersects those exact line sets with authored mappings. It then builds the pseudocode display itself:
+The builder diffs the two source revisions of each function, then diffs the two pseudocode revisions and marks a pseudocode line only when a line it maps to changed:
 
-- `+` is an added pseudocode line mapped to an added source line.
-- `-` is a removed pseudocode line mapped to a deleted source line.
-- `~` is unchanged pseudocode text whose mapped source changed.
-- A wording-only pseudocode edit with no mapped source change stays neutral.
+- `+`: an added pseudocode line that maps to an added source line.
+- `-`: a removed pseudocode line that maps to a deleted source line.
+- `~`: an unchanged pseudocode line whose mapped source changed.
+- No marker: any other line, including pseudocode that was reworded over unchanged source.
 
-Overlapping mappings use line sets, so one changed source line is counted once. An evidence badge labels mapped edits as `signature` when all changed lines precede the function body, or `implementation` when any changed line reaches the function body.
+Overlapping mappings count each changed source line once. When every changed line a pseudocode line maps to is in the declaration, before the function body, the line gets a `signature` badge. Otherwise its tooltip calls the change `implementation`. Added and removed functions get no badge, because they have no signature edit to tell apart.
 
-The toolbar offers three views, remembered across reloads: Pseudo (pseudocode alone, no source pane rendered), Pseudo + unified and Pseudo + split. Pseudocode lines wrap to the pane width with a hanging indent instead of scrolling horizontally, and the Pseudo view caps each card at about 105 characters of code. In the Pseudo view, Shift + hover on a pseudocode line opens a floating peek at the function's source, rendered on demand, scrolled to the mapped lines and highlighted; it closes on Shift release, Escape or a click outside, and stays open while the pointer is inside it. The adjacent TypeScript pane uses Pierre `FileDiff` on the extracted source functions. A registered Pierre theme derives its token colors from the same selected palette as the pseudocode while preserving Pierre's line and intra-line diff markup. The remainder uses exact file diffs. Test, eval, fixture and test-helper paths are excluded before report data is assembled.
+## Views
 
-Both code panes use Quiet ink by default: muted plum keywords, blue calls, teal types, brown literals, charcoal variables, and gray punctuation or comments. Diff backgrounds and `+`, `-`, and `~` grounding retain their separate meaning.
+The toolbar has three views, and the report remembers the choice:
+
+- **Pseudo**: the pseudocode alone, capped at about 105 characters wide. Hold Shift and hover a pseudocode line to open a floating peek at the function's source diff. The peek scrolls to and highlights the changed source lines that the line maps to; for a function whose source did not change, it shows the source. Release Shift, press Escape or click outside to close it; move the pointer into it to keep it open.
+- **Pseudo + unified** (the default) and **Pseudo + split**: the pseudocode beside the source diff, unified or side by side. Hovering a pseudocode line highlights its changed source lines.
+
+Pseudocode lines wrap to the pane width with a hanging indent. The source panes use [`@pierre/diffs`](https://www.npmjs.com/package/@pierre/diffs). "Remaining source changes" lists each file with changed functions that have no card, or changed lines outside every function. Its exact file diff renders when you open it.
+
+Both code panes use the Quiet ink palette by default: muted plum keywords, blue calls, teal types, brown literals, charcoal variables, and gray punctuation and comments. The diff backgrounds and the `+`, `-` and `~` markers keep their own colors. See [CODE-PALETTES.md](CODE-PALETTES.md).

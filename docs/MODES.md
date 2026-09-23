@@ -1,23 +1,25 @@
-# Tool modes
+# Modes
 
-Both modes use the same pseudocode language. Mode-specific instructions determine which source behavior the translation covers.
+All modes use the same [pseudocode language](PSEUDOCODE-LANGUAGE.md). Each mode decides which source behavior the pseudocode covers.
 
-## Execution slice - active
+## Execution slice (active)
 
-Follow one selected execution across functions and components. Show its relevant calls, data transformations, parameters, results, and handoffs. Omit alternative branches while preserving meaningful operations that still execute. Give each function a compact Selected path caption.
+An execution slice follows one selected execution across functions and components. It shows the calls, data transformations, parameters, results and handoffs on that path. It leaves out branches the path does not take, but keeps every meaningful operation that still runs. Each function gets a short `▹` caption that names the path it follows.
 
-The current slice follows a placed order through a new Shipment, Pick and Pack execution, and delivery. Continue developing this mode.
+The current slice follows a placed order through a new Shipment, Pick and Pack execution, to delivery. See [SLICE-INSTRUCTIONS.md](SLICE-INSTRUCTIONS.md). This mode is still being developed.
 
-## Function review - TODO
+Build it with `src/build.cjs`; the manifest is in [MANIFEST.md](MANIFEST.md).
 
-Describe a whole function's application logic, including meaningful branches, without requiring a selected scenario. Condense TypeScript mechanics while preserving real behavior and dependencies.
+## PR change (experimental)
 
-This mode is not implemented. Its mode-specific generation and verification instructions remain to be designed. Any summarized inline blocks must be distinguishable from real function calls so the translation does not invent an architecture that the source lacks.
+A PR-change report explains a pull request one whole function at a time. Each card shows a pseudocode diff beside the exact TypeScript diff of the function. A pseudocode line is marked only when a source line it maps to changed.
 
-## PR changes - experimental
+This mode has no selected scenario, no path caption and no scenario filter. It does not replace function review: a PR-change report explains the difference between two revisions, while function review will describe one whole function at one revision.
 
-Compare a pull request as a set of full-function translations. Each card places a unified pseudocode change beside the exact TypeScript function diff. The report marks a pseudocode line only when its authored mapping intersects a line changed in the pinned source snapshots.
+Build it with `src/build-pr.cjs`; see [PR-CHANGE-MODE.md](PR-CHANGE-MODE.md), [PR-CHANGE-GENERATION.md](PR-CHANGE-GENERATION.md) and [PR-CHANGE-VERIFICATION.md](PR-CHANGE-VERIFICATION.md). The two modes have separate builders, runtimes and styles.
 
-This mode has no selected scenario, path caption or scenario filter. It does not replace function review: PR changes explain a revision delta, while function review will describe one complete function without requiring a revision.
+## Function review (not implemented)
 
-Use `src/build-pr.cjs` and the PR-specific generation and verification documents. The execution-slice builder, runtime and styles remain independent.
+Function review will describe a whole function's application logic, including its meaningful branches, without a selected scenario. It will condense TypeScript mechanics but keep real behavior and dependencies.
+
+Its generation and verification instructions are not written yet. If it summarizes inline blocks, the summaries must look different from real function calls, so the pseudocode does not invent structure the source lacks.

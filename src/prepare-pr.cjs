@@ -11,17 +11,24 @@ const { isExcludedPath } = require('./excluded-paths.cjs');
 const USAGE =
   'Usage: node src/prepare-pr.cjs --repo <repository> --base <base-ref> --head <head-ref> --output <empty-directory> [--title <report title>]';
 
+const OPTIONS = ['repo', 'base', 'head', 'output', 'title'];
+
+function usageError(message) {
+  process.stderr.write(`${message}\n${USAGE}\n`);
+  process.exit(1);
+}
+
 function parseArguments(argv) {
   const values = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index];
     const value = argv[index + 1];
-    if (!name?.startsWith('--') || value === undefined)
-      throw new Error(`Arguments must be --name value pairs\n${USAGE}`);
+    if (!name?.startsWith('--') || value === undefined) usageError('Arguments must be --name value pairs.');
+    if (!OPTIONS.includes(name.slice(2))) usageError(`Unknown option: ${name}`);
     values[name.slice(2)] = value;
   }
   for (const name of ['repo', 'base', 'head', 'output']) {
-    if (!values[name]) throw new Error(`Missing --${name}\n${USAGE}`);
+    if (!values[name]) usageError(`Missing --${name}.`);
   }
   return values;
 }
