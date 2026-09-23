@@ -120,8 +120,9 @@ const options = parseArguments(process.argv.slice(2));
 const repo = path.resolve(options.repo);
 const output = path.resolve(options.output);
 if (!fs.statSync(repo).isDirectory()) throw new Error(`Repository is not a directory: ${repo}`);
-if (fs.existsSync(output) && fs.readdirSync(output).length)
+if (fs.existsSync(output) && fs.readdirSync(output).length) {
   throw new Error(`Output directory must be empty: ${output}`);
+}
 fs.mkdirSync(output, { recursive: true });
 
 const base = git(repo, ['rev-parse', `${options.base}^{commit}`]).trim();
