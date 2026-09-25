@@ -1,3 +1,5 @@
+const { privateConfig } = require('./private-context.cjs');
+
 const escapeHtml = (value) =>
   String(value).replace(/[&<>"']/g, (character) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character],
@@ -24,7 +26,7 @@ const keywords = new Set([
   'typeof',
 ]);
 const types = new Set(['array', 'bool', 'number', 'object', 'readonly', 'string']);
-const literals = new Set(['false', 'null', 'true']);
+const literals = new Set(['false', 'null', 'true', ...(privateConfig().pseudocodeLiterals || [])]);
 const tokenPattern = /(\/\/.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\d[\d_,]*(?:\.\d+)?|→|->|!=|==|<=|>=|&&|\|\||[A-Za-z_][A-Za-z0-9_?]*|\s+|.)/g;
 
 function classify(tokens, index) {

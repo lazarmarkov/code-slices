@@ -2,6 +2,8 @@
 
 ## Order to delivery
 
+This slice is a fictional example of the expected level of detail. Slices for a real project live in `private/`; see [private/README.md](../private/README.md).
+
 Follow one placed order through payment capture, the Dispatcher, a newly opened Shipment, carrier selection, Pick and Pack execution, successful delivery, and Shipment closure. Select the simplest scenario without an existing Shipment. Do not expand alternative scenario branches or list obvious setup assumptions.
 
 Use code and call orchestration as the primary explanation. Show relevant parameters, returned data, and dependencies across components. Use the same numbered stage names and function names in the tree and detailed sections. Infrastructure is treated as understood except for the explicit workflow primitives defined in the language.

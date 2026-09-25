@@ -1,4 +1,5 @@
 const ts = require('typescript');
+const { privateConfig } = require('./private-context.cjs');
 
 const AUTHORING_RULES = `The packet and card skeleton are the complete tool authoring interface. Do not inspect the builder, renderer, source extractor, or tool schema docs. If the supplied application contracts are insufficient, inspect only the missing business contract.
 
@@ -9,7 +10,11 @@ const AUTHORING_RULES = `The packet and card skeleton are the complete tool auth
 - Preserve null and existence semantics exactly. Do not replace a null or object guard with generic truthiness.
 - Omit a parameter or field annotation whose whole type is string, number or bool. Write a parameter or field that may be null or undefined with ? instead of the union (warehouseRaw? for warehouseRaw?: string | null, warehouseRef?: WarehouseRef for warehouseRef: WarehouseRef | null). Keep other unions, arrays, generics, named types and every return type. Use bool. Predicate aliases may end in ?. Use .in?(a, b) for membership; status(a | b) only lists return variants. map(field) is field projection. a..b is inclusive. Express negated guards with if !condition. Use postfix if guards only when they preserve the source guard. Keep explicit assignment and do not use implicit returns or calls.`;
 
-const scopeIdentifierPattern = /\b(?:org(?:anization)?_?ids?|tenant_?ids?)\b/gi;
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const scopeIdentifierPattern = new RegExp(
+  `\\b(?:org(?:anization)?_?ids?|tenant_?ids?${(privateConfig().scopeIdentifiers || []).map((name) => `|${escapeRegExp(name)}`).join('')})\\b`,
+  'gi',
+);
 
 function identifiers(text) {
   return new Set(text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || []);

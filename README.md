@@ -41,7 +41,7 @@ This repository contains a working report builder and browser renderer. It also 
 
 The source extractor currently supports TypeScript function declarations, class methods, and function-valued variables. Packaged reports support mappings within the displayed function. External function and file mapping previews from the original prototype have not been generalized yet.
 
-Generated reports embed the source they display. Handle each report according to the confidentiality of its input source.
+Generated reports embed the source they display. Handle each report according to the confidentiality of its input source. Project-specific context, such as a real codebase's domain rules and calibration examples, lives in the gitignored `private/` folder; see [private/README.md](private/README.md).
 
 ## Design documents
 

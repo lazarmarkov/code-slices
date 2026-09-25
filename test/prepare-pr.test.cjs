@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 const test = require('node:test');
+const { privateConfig, privateNotes } = require('../src/private-context.cjs');
 
 const project = path.resolve(__dirname, '..');
 
@@ -145,4 +146,16 @@ test('prepares pinned changed functions and excludes test paths', () => {
   assert.equal(invalidValidation.signal, null);
   assert.equal(invalidValidation.status, 1);
   assert.match(invalidValidation.stdout, /mapping 1 has invalid pseudo range/);
+});
+
+test('private notes join project files in name order and skip the README', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'code-slices-private-'));
+  fs.writeFileSync(path.join(dir, 'README.md'), 'Folder description.');
+  fs.writeFileSync(path.join(dir, 'zeta.md'), 'Zeta rules.\n');
+  fs.writeFileSync(path.join(dir, 'acme.md'), 'Acme rules.\n');
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ scopeIdentifiers: ['accountScope'] }));
+  assert.equal(privateNotes(dir), 'Acme rules.\n\nZeta rules.');
+  assert.deepEqual(privateConfig(dir).scopeIdentifiers, ['accountScope']);
+  assert.equal(privateNotes(path.join(dir, 'missing')), '');
+  assert.deepEqual(privateConfig(path.join(dir, 'missing')), {});
 });

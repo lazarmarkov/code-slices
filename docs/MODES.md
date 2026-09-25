@@ -6,7 +6,7 @@ Both modes use the same pseudocode language. Mode-specific instructions determin
 
 Follow one selected execution across functions and components. Show its relevant calls, data transformations, parameters, results, and handoffs. Omit alternative branches while preserving meaningful operations that still execute. Give each function a compact Selected path caption.
 
-The current slice follows a placed order through a new Shipment, Pick and Pack execution, and delivery. Continue developing this mode.
+The slice being developed is described in [SLICE-INSTRUCTIONS.md](SLICE-INSTRUCTIONS.md). Continue developing this mode.
 
 ## Function review - TODO
 

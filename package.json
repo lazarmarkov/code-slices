@@ -6,6 +6,7 @@
   "scripts": {
     "example": "node src/build.cjs examples/minimal/manifest.json dist/example.html",
     "example:pr": "node src/build-pr.cjs examples/pr-change/manifest.json dist/pr-change.html",
+    "test": "node --test test/*.test.cjs",
     "test:pr": "node --test test/pr-mode.test.cjs"
   },
   "engines": {

@@ -5,6 +5,7 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const { lineOperations, sourceSymbols } = require('./source-model.cjs');
 const { AUTHORING_RULES, referencedContracts } = require('./pr-generation-contract.cjs');
 const { isExcludedReviewPath } = require('./pr-paths.cjs');
+const { privateNotes } = require('./private-context.cjs');
 
 function parseArguments(argv) {
   const values = {};
@@ -215,9 +216,11 @@ const packet = {
   excludedPathRule: 'tests, evals, fixtures, helpers, test helpers, and *.test/spec/eval.*',
   files: packetFiles,
 };
+const notes = privateNotes();
+const rules = notes ? `${AUTHORING_RULES}\n\n## Project context\n\n${notes}` : AUTHORING_RULES;
 const body = packetBody(packet);
-const generation = `# PR pseudocode generation packet\n\nPinned base: \`${base}\`\nPinned head: \`${head}\`\n\n${AUTHORING_RULES}\n\n${body}\n`;
-const verification = `# PR pseudocode verification packet\n\nPinned base: \`${base}\`\nPinned head: \`${head}\`\n\n${AUTHORING_RULES}\n\nVerify the authored cards against the evidence below, then run \`node src/validate-pr-cards.cjs ${output} cards.json --repair-output repair-packet.json\`. Resolve errors and review scope warnings. The repair packet contains only affected cards and evidence.\n\n${body}\n`;
+const generation = `# PR pseudocode generation packet\n\nPinned base: \`${base}\`\nPinned head: \`${head}\`\n\n${rules}\n\n${body}\n`;
+const verification = `# PR pseudocode verification packet\n\nPinned base: \`${base}\`\nPinned head: \`${head}\`\n\n${rules}\n\nVerify the authored cards against the evidence below, then run \`node src/validate-pr-cards.cjs ${output} cards.json --repair-output repair-packet.json\`. Resolve errors and review scope warnings. The repair packet contains only affected cards and evidence.\n\n${body}\n`;
 
 writeJson(path.join(output, 'manifest.json'), manifest);
 writeJson(path.join(output, 'cards.json'), { cards });
