@@ -21,6 +21,10 @@ Examples:
 
 The caption describes the selected execution, not every execution of the original function. It must not excuse omitting meaningful operations that still occur on that path.
 
+## Review order
+
+Order flows, the cards within each flow and the manifest `files` list by [review order](MODES.md#review-order). Within a flow, cards follow the selected execution. List files in the order the slices first reach them, then the files no slice covers, each after the files it depends on.
+
 ## PR-scoped documents
 
 A PR document can contain multiple Execution slices. The diff sets the review boundary; each slice remains one selected path. List eligible changed files and functions, link those covered by slices, and explicitly mark the rest as not covered. Review schema and supporting registrations separately rather than forcing them into invented runtime flows. Use actual PR base/head revisions; do not substitute the assembled stack tip. Show absent Before implementations honestly for new APIs. Generate the two pseudocode revisions consistently so wording changes do not imply source changes.

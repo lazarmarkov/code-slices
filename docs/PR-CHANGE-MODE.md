@@ -29,7 +29,7 @@ Each card has:
 - Optional `calls` and `calledBy`: card IDs rendered as links under the card header. IDs without a card in the report are dropped, and links follow report order.
 - `mappingsBefore` and `mappingsAfter`: arrays of `{ "pseudo": [first, last], "source": [first, last] }`. Both ranges are one-based, inclusive and relative to the extracted function.
 
-Card order is report order. Put the changes that best explain the PR first.
+Card order is report order; [PR-change generation](PR-CHANGE-GENERATION.md#order) sets it.
 
 ## Marker contract
 

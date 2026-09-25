@@ -4,7 +4,11 @@ Model and reasoning defaults, alternatives, and comparison reporting format are 
 
 ## Input
 
-Read both pinned source snapshots and the pull request diff. Exclude tests, evals, fixtures and test helpers. Select changed implementation functions that help a reviewer understand the PR, then order the most meaningful changes first.
+Read both pinned source snapshots and the pull request diff. Exclude tests, evals, fixtures and test helpers. Select changed implementation functions that help a reviewer understand the PR.
+
+## Order
+
+Order sections, cards and the manifest `files` list by [review order](MODES.md#review-order): each stage and card after the ones it depends on, and files in the order the cards first reach them. When the order cannot place a caller or callee next to a card, link it with `calls` or `calledBy`.
 
 ## Output
 
