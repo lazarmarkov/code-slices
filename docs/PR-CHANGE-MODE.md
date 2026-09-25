@@ -19,12 +19,14 @@ The manifest requires:
 
 Optional `description`, `url` and `repositoryURL` fields provide report context.
 Optional `cardOrder` lists card IDs that should lead the report. Unlisted cards retain their input order.
+Optional `sections` groups the report into numbered reading stages, as an alternative to `cardOrder`. Each section has a `title`, an optional `intro` (blank lines separate paragraphs, a paragraph whose lines all start with `1. ` or `- ` renders as a list, backticks mark code), optional `terms` as `[term, meaning]` pairs, and the `cards` it contains in reading order. Section order is report order. A card may appear in at most one section, every listed ID must exist, and unlisted cards follow under Other changes. Each section opens with a heading panel in the report and a heading in the sidebar.
 
 Each card has:
 
 - `id`, `file` and `symbol`.
 - Optional `className` to disambiguate class methods, object-owned methods and constructors. Use `symbol: "constructor"` for a constructor. Set `className: null` to select a top-level function when a method has the same name; omitting it allows one unambiguous match.
 - `before` and `after`: full-function pseudocode strings. Use `null` on the missing side of an added or removed function.
+- Optional `calls` and `calledBy`: card IDs rendered as links under the card header. IDs without a card in the report are dropped, and links follow report order.
 - `mappingsBefore` and `mappingsAfter`: arrays of `{ "pseudo": [first, last], "source": [first, last] }`. Both ranges are one-based, inclusive and relative to the extracted function.
 
 Card order is report order. Put the changes that best explain the PR first.

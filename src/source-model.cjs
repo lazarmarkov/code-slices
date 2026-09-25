@@ -31,15 +31,22 @@ function sourceSymbols(file, text) {
     });
   }
 
-  function visit(node) {
+  // A function nested in another function is owned by it, so closures with the same name in different
+  // functions stay distinct and read as `outer.inner`.
+  function visit(node, enclosing) {
+    let inner = enclosing;
+    const qualified = (owner, name) => (owner ? `${owner}.${name}` : name);
     if (ts.isFunctionDeclaration(node) && node.name && node.body) {
-      add(node, node.name.getText(sourceFile), null, node.body);
+      add(node, node.name.getText(sourceFile), enclosing, node.body);
+      inner = qualified(enclosing, node.name.getText(sourceFile));
     } else if (ts.isMethodDeclaration(node) && node.name && node.body) {
-      const className = ownerName(node.parent);
+      const className = enclosing ?? ownerName(node.parent);
       add(node, node.name.getText(sourceFile), className, node.body);
+      inner = qualified(className, node.name.getText(sourceFile));
     } else if (ts.isConstructorDeclaration(node) && node.body) {
       const className = ts.isClassDeclaration(node.parent) ? node.parent.name?.getText(sourceFile) || null : null;
       add(node, 'constructor', className, node.body);
+      inner = qualified(className, 'constructor');
     } else if (
       ts.isVariableDeclaration(node) &&
       node.initializer &&
@@ -50,12 +57,13 @@ function sourceSymbols(file, text) {
       if (!ts.isVariableStatement(statement) || declarationList.declarations.length !== 1) {
         throw new Error(`Unsupported multi-declaration function variable in ${file}: ${node.name.getText(sourceFile)}`);
       }
-      add(statement, node.name.getText(sourceFile), null, node.initializer.body);
+      add(statement, node.name.getText(sourceFile), enclosing, node.initializer.body);
+      inner = qualified(enclosing, node.name.getText(sourceFile));
     }
-    ts.forEachChild(node, visit);
+    ts.forEachChild(node, (child) => visit(child, inner));
   }
 
-  visit(sourceFile);
+  visit(sourceFile, null);
   return output;
 }
 

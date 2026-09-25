@@ -157,7 +157,15 @@ function pseudoRows(card, beforeChanges, afterChanges) {
 }
 
 const loadedCards = loadCards(manifest.cards);
-const requestedOrder = new Map((manifest.cardOrder || []).map((id, index) => [id, index]));
+const sectionInputs = manifest.sections || [];
+const sectionOrder = sectionInputs.flatMap((section) => section.cards || []);
+if (sectionOrder.length && manifest.cardOrder) throw new Error('Use sections or cardOrder, not both');
+const loadedIds = new Set(loadedCards.map((card) => card.id));
+for (const id of sectionOrder) {
+  if (!loadedIds.has(id)) throw new Error(`Section lists an unknown card: ${id}`);
+}
+if (new Set(sectionOrder).size !== sectionOrder.length) throw new Error('A card is listed in more than one section');
+const requestedOrder = new Map((sectionOrder.length ? sectionOrder : manifest.cardOrder || []).map((id, index) => [id, index]));
 const authoredCards = loadedCards
   .map((card, index) => ({ card, index }))
   .sort((left, right) => {
@@ -281,6 +289,26 @@ const representedCount = files.reduce(
   (total, file) => total + file.changedSymbols.filter((symbol) => symbol.represented).length,
   0,
 );
+const cardIndex = new Map(cards.map((card, index) => [card.id, index]));
+for (const card of cards) {
+  for (const field of ['calls', 'calledBy']) {
+    card[field] = (card[field] || []).filter((id) => cardIndex.has(id)).sort((left, right) => cardIndex.get(left) - cardIndex.get(right));
+  }
+}
+const sections = sectionInputs
+  .filter((section) => section.cards?.length)
+  .map((section, index) => ({
+    id: section.id || `section-${index + 1}`,
+    title: section.title,
+    intro: section.intro || '',
+    terms: section.terms || [],
+    start: cardIndex.get(section.cards[0]),
+  }));
+const unsectioned = cards.length - sectionOrder.length;
+if (sections.length && unsectioned > 0) {
+  sections.push({ id: 'section-other', title: 'Other changes', intro: 'Cards not placed in a section.', terms: [], start: sectionOrder.length });
+}
+const sectionAt = new Map(sections.map((section, index) => [section.start, { ...section, number: index + 1 }]));
 const data = {
   title: manifest.title,
   description: manifest.description || '',
@@ -289,6 +317,7 @@ const data = {
   base: manifest.baseRef,
   head: manifest.headRef,
   cards,
+  sections,
   files,
   palette: defaultPalette,
   coverage: { changedSymbolCount, representedCount },
@@ -298,7 +327,7 @@ const baseCss = fs.readFileSync(path.join(__dirname, 'style.css'), 'utf8');
 const prCss = fs.readFileSync(path.join(__dirname, 'style-pr.css'), 'utf8');
 const runtime = fs.readFileSync(path.join(__dirname, 'runtime-pr.js'), 'utf8');
 const paletteCss = `.pr-review{${roles.map((role) => `--code-${role}:${defaultPalette[role]}`).join(';')}}`;
-const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(manifest.title)}</title><style>${baseCss}\n${paletteCss}\n${prCss}</style></head><body class="pr-review"><header><div class="muted">CODE SLICES / PR CHANGES</div><h1>${escapeHtml(manifest.title)}</h1><p>${escapeHtml(manifest.description || 'Review source-grounded function changes.')}</p><p class="muted">${escapeHtml(manifest.baseRef)} → ${escapeHtml(manifest.headRef)} · ${cards.length} full-function translations · ${representedCount}/${changedSymbolCount} changed symbols represented</p></header><div class="layout"><aside><a href="#changes">Changed functions</a>${cards.map((card, index) => `<a href="#${card.id}">${String(index + 1).padStart(2, '0')} ${escapeHtml((card.className ? `${card.className}.` : '') + card.symbol)}</a>`).join('')}<a href="#remainder">Remaining source changes</a><a href="#guide">Reading guide</a></aside><main><div class="toolbar"><div>View <button data-diff-style="hidden">Pseudo</button><button data-diff-style="unified">Pseudo + unified</button><button data-diff-style="split">Pseudo + split</button></div><span class="peek-hint"><kbd>Shift</kbd> + hover a line to peek at its source</span></div><section id="changes"><div id="cards"></div></section><section class="panel remainder" id="remainder"><h2>Remaining source changes</h2><p class="muted">Changed symbols without a pseudocode card and structural changes are explicit here. Exact file diffs stay collapsed until opened.</p><div id="remainder-content"></div></section><section class="panel" id="guide"><h2>Reading guide</h2><p>The left pane is full-function pseudocode. Its markers appear only when that pseudocode line maps to an exact line changed by Git. A <code>~</code> means the mapped implementation changed while the pseudocode wording stayed the same; it does not claim a behavior change.</p><p>The evidence label distinguishes a declaration or signature edit from an implementation edit. The right pane is the exact TypeScript function diff rendered from the pinned snapshots; the Pseudo view shows the pseudocode alone, and the other two views add the source diff unified or split. In the Pseudo view, holding Shift while hovering a pseudocode line opens a floating peek at that function's source with the mapped lines highlighted; release Shift, press Escape or click elsewhere to close it, or move the pointer into the peek to keep it open. Test, eval, fixture and helper files are excluded from cards, evidence and remaining changes.</p></section></main></div><script type="application/json" id="review-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script><script type="module">${runtime}</script></body></html>`;
+const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(manifest.title)}</title><style>${baseCss}\n${paletteCss}\n${prCss}</style></head><body class="pr-review"><header><div class="muted">CODE SLICES / PR CHANGES</div><h1>${escapeHtml(manifest.title)}</h1><p>${escapeHtml(manifest.description || 'Review source-grounded function changes.')}</p><p class="muted">${escapeHtml(manifest.baseRef)} → ${escapeHtml(manifest.headRef)} · ${cards.length} full-function translations · ${representedCount}/${changedSymbolCount} changed symbols represented</p></header><div class="layout"><aside><a href="#changes">Changed functions</a>${cards.map((card, index) => `${sectionAt.has(index) ? `<a class="aside-section" href="#${sectionAt.get(index).id}">${sectionAt.get(index).number}. ${escapeHtml(sectionAt.get(index).title)}</a>` : ''}<a href="#${card.id}">${String(index + 1).padStart(2, '0')} ${escapeHtml((card.className ? `${card.className}.` : '') + card.symbol)}</a>`).join('')}<a href="#remainder">Remaining source changes</a><a href="#guide">Reading guide</a></aside><main><div class="toolbar"><div>View <button data-diff-style="hidden">Pseudo</button><button data-diff-style="unified">Pseudo + unified</button><button data-diff-style="split">Pseudo + split</button></div><span class="peek-hint"><kbd>Shift</kbd> + hover a line to peek at its source</span></div><section id="changes"><div id="cards"></div></section><section class="panel remainder" id="remainder"><h2>Remaining source changes</h2><p class="muted">Changed symbols without a pseudocode card and structural changes are explicit here. Exact file diffs stay collapsed until opened.</p><div id="remainder-content"></div></section><section class="panel" id="guide"><h2>Reading guide</h2><p>The left pane is full-function pseudocode. Its markers appear only when that pseudocode line maps to an exact line changed by Git. A <code>~</code> means the mapped implementation changed while the pseudocode wording stayed the same; it does not claim a behavior change.</p><p>The evidence label distinguishes a declaration or signature edit from an implementation edit. The right pane is the exact TypeScript function diff rendered from the pinned snapshots; the Pseudo view shows the pseudocode alone, and the other two views add the source diff unified or split. In the Pseudo view, holding Shift while hovering a pseudocode line opens a floating peek at that function's source with the mapped lines highlighted; release Shift, press Escape or click elsewhere to close it, or move the pointer into the peek to keep it open. Test, eval, fixture and helper files are excluded from cards, evidence and remaining changes.</p></section></main></div><script type="application/json" id="review-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script><script type="module">${runtime}</script></body></html>`;
 
 const output = path.resolve(args[1]);
 fs.mkdirSync(path.dirname(output), { recursive: true });

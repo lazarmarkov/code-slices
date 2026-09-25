@@ -222,12 +222,61 @@ document.addEventListener('pointerdown', (event) => {
   if (peek.element && !peek.element.hidden && !peek.element.contains(event.target)) closePeek();
 });
 
+function inlineText(value) {
+  return escapeHtml(value).replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+// A paragraph whose every line starts with "1. " or "- " renders as a list.
+function introBlock(paragraph) {
+  const lines = paragraph.split('\n').map((line) => line.trim());
+  const ordered = lines.every((line) => /^\d+\.\s/.test(line));
+  const bulleted = lines.every((line) => /^-\s/.test(line));
+  if (!ordered && !bulleted) return `<p>${inlineText(paragraph)}</p>`;
+  const tag = ordered ? 'ol' : 'ul';
+  const items = lines.map((line) => `<li>${inlineText(line.replace(/^(\d+\.|-)\s+/, ''))}</li>`).join('');
+  return `<${tag}>${items}</${tag}>`;
+}
+
+function sectionHeading(section, number) {
+  const heading = document.createElement('section');
+  heading.id = section.id;
+  heading.className = 'stage-heading';
+  const paragraphs = section.intro
+    .split(/\n\s*\n/)
+    .filter((paragraph) => paragraph.trim())
+    .map((paragraph) => introBlock(paragraph.trim()))
+    .join('');
+  const terms = section.terms.length
+    ? `<dl class="stage-terms">${section.terms.map(([term, meaning]) => `<dt><code>${escapeHtml(term)}</code></dt><dd>${inlineText(meaning)}</dd>`).join('')}</dl>`
+    : '';
+  heading.innerHTML = `<div class="stage-number">Stage ${number}</div><h2>${escapeHtml(section.title)}</h2>${paragraphs}${terms}`;
+  return heading;
+}
+
+function relationLinks(label, ids) {
+  if (!ids?.length) return '';
+  const links = ids
+    .map((id) => {
+      const index = cardIndexById.get(id);
+      const target = data.cards[index];
+      const name = `${target.className ? `${target.className}.` : ''}${target.symbol}`;
+      return `<a href="#${id}">${String(index + 1).padStart(2, '0')} ${escapeHtml(name)}</a>`;
+    })
+    .join('');
+  return `<div class="relation"><span>${label}</span><div class="relation-links">${links}</div></div>`;
+}
+
+const cardIndexById = new Map(data.cards.map((card, index) => [card.id, index]));
+const sectionByStart = new Map((data.sections || []).map((section, index) => [section.start, { section, number: index + 1 }]));
+
 function renderCards() {
   document.body.classList.toggle('source-split', state.diffStyle === 'split');
   document.body.classList.toggle('source-hidden', state.diffStyle === 'hidden');
   const container = document.getElementById('cards');
   container.replaceChildren();
   for (const [index, card] of data.cards.entries()) {
+    const start = sectionByStart.get(index);
+    if (start) container.append(sectionHeading(start.section, start.number));
     const article = document.createElement('article');
     article.id = card.id;
     article.className = 'fn pr-card';
@@ -237,7 +286,7 @@ function renderCards() {
       : '<div class="pane-label">Source change</div>';
     const sourcePane = state.diffStyle === 'hidden' ? '' : `<div class="source-pane">${sourceLabel}<div class="source-diff"></div></div>`;
     const pseudoLabel = state.diffStyle === 'hidden' ? '' : '<div class="pane-label">Pseudocode</div>';
-    article.innerHTML = `<div class="fn-header"><span class="card-number">${String(index + 1).padStart(2, '0')}</span><h2>${escapeHtml(name)}</h2><span class="tag status-${card.status.toLowerCase()}">${escapeHtml(card.status)}</span><code class="card-file">${escapeHtml(card.file)}</code></div><div class="change-panes"><div class="pseudo-pane">${pseudoLabel}<div class="pseudo-diff" role="table" aria-label="Full-function pseudocode change">${card.pseudoRows.map(pseudoLine).join('')}</div></div>${sourcePane}</div>`;
+    article.innerHTML = `<div class="fn-header"><span class="card-number">${String(index + 1).padStart(2, '0')}</span><h2>${escapeHtml(name)}</h2><span class="tag status-${card.status.toLowerCase()}">${escapeHtml(card.status)}</span><code class="card-file">${escapeHtml(card.file)}</code></div>${card.calledBy?.length || card.calls?.length ? `<div class="relations">${relationLinks('Called by', card.calledBy)}${relationLinks('Calls', card.calls)}</div>` : ''}<div class="change-panes"><div class="pseudo-pane">${pseudoLabel}<div class="pseudo-diff" role="table" aria-label="Full-function pseudocode change">${card.pseudoRows.map(pseudoLine).join('')}</div></div>${sourcePane}</div>`;
     container.append(article);
     if (state.diffStyle === 'hidden') continue;
     renderDiff(article.querySelector('.source-diff'), card.sourceBefore?.code, card.sourceAfter?.code);

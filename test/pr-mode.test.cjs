@@ -117,3 +117,68 @@ test('report excludes helper files and their source', () => {
   assert.deepEqual(data.files, []);
   assert.doesNotMatch(html, /helperSecret|before-private|after-private/);
 });
+
+test('sections set reading order and relations link only to present cards', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'code-slices-sections-'));
+  const example = path.resolve(__dirname, '../examples/pr-change');
+  const manifest = JSON.parse(fs.readFileSync(path.join(example, 'manifest.json'), 'utf8'));
+  manifest.sources = { base: path.join(example, 'base'), head: path.join(example, 'head') };
+  manifest.cards[0].calledBy = ['format-label', 'missing-card'];
+  manifest.sections = [
+    { title: 'Labels first', intro: 'Read `formatLabel` before the rest.', terms: [['Label', 'A display name.']], cards: ['format-label'] },
+    { title: 'Messages', cards: ['normalize-message'] },
+  ];
+  fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify(manifest));
+  const output = path.join(root, 'report.html');
+  execFileSync(process.execPath, ['src/build-pr.cjs', path.join(root, 'manifest.json'), output], {
+    cwd: path.resolve(__dirname, '..'),
+  });
+  const html = fs.readFileSync(output, 'utf8');
+  const data = JSON.parse(html.match(/<script type="application\/json" id="review-data">(.*?)<\/script>/s)[1]);
+  assert.deepEqual(data.cards.slice(0, 2).map((card) => card.id), ['format-label', 'normalize-message']);
+  assert.deepEqual(
+    data.sections.map(({ title, start }) => ({ title, start })),
+    [
+      { title: 'Labels first', start: 0 },
+      { title: 'Messages', start: 1 },
+      { title: 'Other changes', start: 2 },
+    ],
+  );
+  assert.deepEqual(data.cards[1].calledBy, ['format-label']);
+  assert.match(html, /class="aside-section" href="#section-1">1\. Labels first/);
+});
+
+test('sections reject unknown and duplicated cards', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'code-slices-sections-bad-'));
+  const example = path.resolve(__dirname, '../examples/pr-change');
+  const manifest = JSON.parse(fs.readFileSync(path.join(example, 'manifest.json'), 'utf8'));
+  manifest.sources = { base: path.join(example, 'base'), head: path.join(example, 'head') };
+  for (const cards of [['nope'], ['format-label', 'format-label']]) {
+    manifest.sections = [{ title: 'Bad', cards }];
+    fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify(manifest));
+    assert.throws(() =>
+      execFileSync(process.execPath, ['src/build-pr.cjs', path.join(root, 'manifest.json'), path.join(root, 'r.html')], {
+        cwd: path.resolve(__dirname, '..'),
+        stdio: 'pipe',
+      }),
+    );
+  }
+});
+
+test('nested closures are owned by their enclosing function', () => {
+  const symbols = sourceSymbols(
+    'example.ts',
+    'function scanA() { const upsert = () => 1; return upsert(); }\nfunction scanB() { const upsert = () => 2; return upsert(); }\nclass Box { open() { const inner = () => 3; return inner(); } }',
+  );
+  assert.deepEqual(
+    symbols.map(({ symbol, className }) => ({ symbol, className })),
+    [
+      { symbol: 'scanA', className: null },
+      { symbol: 'upsert', className: 'scanA' },
+      { symbol: 'scanB', className: null },
+      { symbol: 'upsert', className: 'scanB' },
+      { symbol: 'open', className: 'Box' },
+      { symbol: 'inner', className: 'Box.open' },
+    ],
+  );
+});
